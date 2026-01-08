@@ -130,9 +130,9 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
       depositValue: 0,
       password: '',
       card: '',
-      status: 'ACTIVE',
+      status: type, // Default status is the current tab type
       tags: [],
-      owner: ''
+      owner: currentUser?.name || '' // Default owner is current user
     });
     setUsePack(false); 
     setSelectedPackId('');
@@ -223,10 +223,10 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3">
-          {type === 'ACTIVE' && (
+          {(type === 'ACTIVE' || type === 'LIMITED') && (
              <button onClick={handleNew} className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-500/20 transition-all">
                 <Plus size={18} />
-                Nova Conta
+                {type === 'ACTIVE' ? 'Nova Conta' : 'Add Limitada'}
              </button>
           )}
           
@@ -403,12 +403,12 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
 
                 {/* Owner Field */}
                 <div className="space-y-1">
-                    <label className="text-xs font-medium text-slate-400">Dono da Conta (Opcional)</label>
+                    <label className="text-xs font-medium text-slate-400">Dono da Conta</label>
                     <input 
                        type="text"
                        value={editingAccount.owner || ''}
                        onChange={(e) => setEditingAccount({...editingAccount, owner: e.target.value})}
-                       placeholder="Ex: Cliente X, Sócio Y..."
+                       placeholder="Nome do responsável"
                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-indigo-500"
                     />
                 </div>
@@ -469,8 +469,8 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                     />
                 </div>
 
-                {/* Pack Deduction Option (Only for new accounts) */}
-                {!editingAccount.id && (
+                {/* Pack Deduction Option (Only for new accounts and if status is ACTIVE) */}
+                {!editingAccount.id && editingAccount.status === 'ACTIVE' && (
                      <div className="p-3 bg-slate-800/50 border border-slate-700 rounded-xl mt-2">
                         <div className="flex items-center justify-between mb-2">
                              <div className="flex items-center gap-2">
@@ -501,8 +501,13 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                         )}
                      </div>
                 )}
+                
+                {/* Status Indicator (Read-only) */}
+                <div className="text-xs text-center text-slate-500 pt-2 border-t border-slate-800 mt-4">
+                    Criando conta como: <span className="font-bold text-white">{editingAccount.status}</span>
+                </div>
 
-                <div className="pt-4 flex gap-3">
+                <div className="pt-2 flex gap-3">
                    <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
                      <Save size={18} />
                      Salvar Conta

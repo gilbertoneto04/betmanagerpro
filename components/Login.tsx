@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { Lock, User as UserIcon, ArrowRight, Mail, AlertCircle, CheckCircle2, AtSign } from 'lucide-react';
+import { auth, db } from '../firebase';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -9,74 +12,86 @@ interface LoginProps {
 export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [name, setName] = useState('');
-  const [username, setUsername] = useState(''); // Novo state para cadastro
-  const [email, setEmail] = useState(''); // No login, serve como "Identifier" (Email ou User)
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    setLoading(true);
 
-    // Load existing users
-    const storedUsersStr = localStorage.getItem('betManager_users');
-    const users: User[] = storedUsersStr ? JSON.parse(storedUsersStr) : [];
+    try {
+      if (isRegistering) {
+        // --- REGISTRO FIREBASE ---
+        if (!name || !email || !password || !username) {
+          throw new Error('Preencha todos os campos.');
+        }
 
-    if (isRegistering) {
-      // --- LÓGICA DE CADASTRO ---
-      if (!name || !email || !password || !username) {
-        setError('Preencha todos os campos.');
-        return;
-      }
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const firebaseUser = userCredential.user;
 
-      // Validação de duplicidade (Email ou Usuário)
-      if (users.some(u => u.email === email)) {
-        setError('Este email já está cadastrado.');
-        return;
-      }
-      if (users.some(u => u.username === username)) {
-        setError('Este nome de usuário já está em uso.');
-        return;
-      }
+        // Atualizar perfil básico
+        await updateProfile(firebaseUser, { displayName: name });
 
-      const newUser: User = {
-        id: Math.random().toString(36).substring(7),
-        name,
-        username,
-        email,
-        password, // Em produção, usar hash!
-        role: users.length === 0 ? 'ADMIN' : 'USER'
-      };
+        // Salvar dados extras no Firestore (Users collection)
+        const newUser: User = {
+          id: firebaseUser.uid,
+          name,
+          username,
+          email,
+          role: 'USER' // Padrão USER, mude manualmente no banco se precisar de ADMIN
+        };
 
-      const updatedUsers = [...users, newUser];
-      localStorage.setItem('betManager_users', JSON.stringify(updatedUsers));
-      
-      setSuccess('Conta criada com sucesso! Faça login.');
-      setIsRegistering(false);
-      setName('');
-      setUsername('');
-      setPassword('');
-      // Mantemos o email preenchido para facilitar o login, ou limpamos se preferir
-      setEmail(''); 
-    } else {
-      // --- LÓGICA DE LOGIN ---
-      // identifier pode ser email ou username
-      const identifier = email; 
-      
-      const user = users.find(u => 
-        (u.email === identifier || u.username === identifier) && 
-        u.password === password
-      );
-
-      if (user) {
-        // Save session
-        localStorage.setItem('betManager_currentUser', JSON.stringify(user));
-        onLogin(user);
+        await setDoc(doc(db, "users", firebaseUser.uid), newUser);
+        
+        setSuccess('Conta criada com sucesso! Você já pode fazer login.');
+        setIsRegistering(false);
+        setName('');
+        setUsername('');
+        setPassword('');
       } else {
-        setError('Usuário/Email ou senha incorretos.');
+        // --- LOGIN FIREBASE ---
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const firebaseUser = userCredential.user;
+
+        // Buscar dados completos do usuário no Firestore
+        const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+        
+        if (userDoc.exists()) {
+          const userData = userDoc.data() as User;
+          onLogin(userData);
+        } else {
+          // Fallback se o usuário existir no Auth mas não no Firestore (raro)
+          const fallbackUser: User = {
+             id: firebaseUser.uid,
+             name: firebaseUser.displayName || 'Usuário',
+             username: email.split('@')[0],
+             email: email,
+             role: 'USER'
+          };
+          onLogin(fallbackUser);
+        }
       }
+    } catch (err: any) {
+      console.error(err);
+      let msg = 'Erro ao realizar operação.';
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+        msg = 'Email ou senha incorretos.';
+      } else if (err.code === 'auth/email-already-in-use') {
+        msg = 'Este email já está em uso.';
+      } else if (err.code === 'auth/weak-password') {
+        msg = 'A senha deve ter pelo menos 6 caracteres.';
+      } else if (err.message) {
+        msg = err.message;
+      }
+      setError(msg);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -153,17 +168,15 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           )}
 
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">
-                {isRegistering ? 'Email' : 'Email ou Usuário'}
-            </label>
+            <label className="block text-xs font-medium text-slate-400 mb-1">Email</label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
               <input 
-                type={isRegistering ? "email" : "text"}
+                type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder={isRegistering ? "seu@email.com" : "email ou usuario"}
+                placeholder="seu@email.com"
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
               />
             </div>
@@ -186,10 +199,11 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
           <button 
             type="submit" 
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 mt-6 active:scale-[0.98]"
+            disabled={loading}
+            className={`w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 mt-6 active:scale-[0.98] ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
           >
-            {isRegistering ? 'Criar Conta' : 'Entrar no Sistema'}
-            <ArrowRight size={18} />
+            {loading ? 'Processando...' : (isRegistering ? 'Criar Conta' : 'Entrar no Sistema')}
+            {!loading && <ArrowRight size={18} />}
           </button>
         </form>
         

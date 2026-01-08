@@ -1,26 +1,29 @@
 import React, { useState } from 'react';
-import { Trash2, Plus, RotateCcw, Landmark, User } from 'lucide-react';
+import { Trash2, Plus, RotateCcw, Landmark, User, Shield, ShieldCheck } from 'lucide-react';
 import { PixKey, User as UserType } from '../types';
+import { db } from '../firebase';
+import { collection, addDoc, deleteDoc, doc, query, where, getDocs } from 'firebase/firestore';
 
 interface SettingsProps {
   houses: string[];
-  setHouses: (houses: string[]) => void;
+  setHouses: (houses: string[]) => void; // Legacy signature, we will bypass for DB ops
   taskTypes: { label: string; value: string }[];
   setTaskTypes: (types: { label: string; value: string }[]) => void;
   pixKeys: PixKey[];
   setPixKeys: (keys: PixKey[]) => void;
   currentUser: UserType | null;
+  users: UserType[]; 
   onUpdateUser: (user: UserType) => void;
   onReset?: () => void;
   logAction: (description: string, action: string) => void;
 }
 
 export const Settings: React.FC<SettingsProps> = ({ 
-  houses, setHouses, 
-  taskTypes, setTaskTypes, 
-  pixKeys, setPixKeys,
-  currentUser, onUpdateUser,
-  onReset, logAction 
+  houses, 
+  taskTypes, 
+  pixKeys,
+  currentUser, users, onUpdateUser,
+  logAction 
 }) => {
   const [newHouse, setNewHouse] = useState('');
   const [newTypeLabel, setNewTypeLabel] = useState('');
@@ -32,66 +35,66 @@ export const Settings: React.FC<SettingsProps> = ({
   const [pixKey, setPixKey] = useState('');
 
   // --- Houses ---
-  const handleAddHouse = (e: React.FormEvent) => {
+  const handleAddHouse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newHouse.trim()) {
-      setHouses([...houses, newHouse.trim()]);
+      await addDoc(collection(db, 'config_houses'), { name: newHouse.trim() });
       logAction('Configuração: Casas', `Adicionou a casa: ${newHouse.trim()}`);
       setNewHouse('');
     }
   };
 
-  const handleRemoveHouse = (index: number) => {
-    const houseName = houses[index];
-    const newHouses = [...houses];
-    newHouses.splice(index, 1);
-    setHouses(newHouses);
+  const handleRemoveHouse = async (houseName: string) => {
+    // Need to find the doc first since we only passed string array
+    const q = query(collection(db, 'config_houses'), where("name", "==", houseName));
+    const querySnapshot = await getDocs(q);
+    querySnapshot.forEach(async (d) => {
+        await deleteDoc(doc(db, 'config_houses', d.id));
+    });
     logAction('Configuração: Casas', `Removeu a casa: ${houseName}`);
   };
 
   // --- Task Types ---
-  const handleAddType = (e: React.FormEvent) => {
+  const handleAddType = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newTypeLabel.trim()) {
       const val = newTypeLabel.trim().toUpperCase().replace(/\s+/g, '_');
-      setTaskTypes([...taskTypes, { label: newTypeLabel.trim(), value: val }]);
+      await addDoc(collection(db, 'config_types'), { label: newTypeLabel.trim(), value: val });
       logAction('Configuração: Tipos', `Adicionou o tipo: ${newTypeLabel.trim()}`);
       setNewTypeLabel('');
     }
   };
 
-  const handleRemoveType = (index: number) => {
-    const typeLabel = taskTypes[index].label;
-    const newTypes = [...taskTypes];
-    newTypes.splice(index, 1);
-    setTaskTypes(newTypes);
+  const handleRemoveType = async (typeValue: string, typeLabel: string) => {
+    const q = query(collection(db, 'config_types'), where("value", "==", typeValue));
+    const querySnapshot = await getDocs(q);
+    querySnapshot.forEach(async (d) => {
+        await deleteDoc(doc(db, 'config_types', d.id));
+    });
     logAction('Configuração: Tipos', `Removeu o tipo: ${typeLabel}`);
   };
 
   // --- Pix Keys ---
-  const handleAddPix = (e: React.FormEvent) => {
+  const handleAddPix = async (e: React.FormEvent) => {
     e.preventDefault();
     if (pixName && pixBank && pixKey) {
-        const newPix: PixKey = {
-            id: Math.random().toString(36).substring(7),
+        const newPix = {
             name: pixName,
             bank: pixBank,
             keyType: pixKeyType,
             key: pixKey
         };
-        setPixKeys([...pixKeys, newPix]);
+        await addDoc(collection(db, 'pixKeys'), newPix);
         logAction('Configuração: Pix', `Adicionou chave Pix: ${pixName} (${pixBank})`);
-        // Reset
         setPixName('');
         setPixBank('');
         setPixKey('');
     }
   };
 
-  const handleRemovePix = (id: string) => {
-      const key = pixKeys.find(k => k.id === id);
-      setPixKeys(pixKeys.filter(k => k.id !== id));
-      if (key) logAction('Configuração: Pix', `Removeu chave Pix: ${key.name}`);
+  const handleRemovePix = async (id: string, name: string) => {
+      await deleteDoc(doc(db, 'pixKeys', id));
+      logAction('Configuração: Pix', `Removeu chave Pix: ${name}`);
   };
 
   const handleDefaultKeyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -103,27 +106,51 @@ export const Settings: React.FC<SettingsProps> = ({
   };
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="space-y-8 max-w-5xl mx-auto pb-10">
       <div className="flex justify-between items-center">
         <div>
            <h2 className="text-2xl font-bold text-white mb-2">Configurações</h2>
            <p className="text-slate-400">Gerencie as opções disponíveis no sistema.</p>
         </div>
-        {onReset && (
-            <button 
-                onClick={() => {
-                    onReset();
-                    logAction('Configurações', 'Restaurou padrões de fábrica');
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-red-500/10 hover:text-red-400 border border-slate-700 hover:border-red-500/30 text-slate-300 rounded-lg transition-all text-sm font-medium"
-            >
-                <RotateCcw size={16} />
-                Restaurar Padrões
-            </button>
-        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        {/* User Management Section */}
+        <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-6">
+             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-indigo-500 rounded-full"></span>
+                Gestão de Usuários ({users.length})
+             </h3>
+             <div className="overflow-x-auto">
+                 <table className="w-full text-left text-sm">
+                     <thead className="text-slate-500 font-medium border-b border-slate-800">
+                         <tr>
+                             <th className="pb-3 pl-2">Nome</th>
+                             <th className="pb-3">Usuário</th>
+                             <th className="pb-3">Email</th>
+                             <th className="pb-3">Função</th>
+                         </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-800">
+                         {users.map(u => (
+                             <tr key={u.id}>
+                                 <td className="py-3 pl-2 text-white font-medium">{u.name}</td>
+                                 <td className="py-3 text-slate-300">@{u.username}</td>
+                                 <td className="py-3 text-slate-400">{u.email}</td>
+                                 <td className="py-3">
+                                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold ${u.role === 'ADMIN' ? 'bg-purple-500/20 text-purple-400' : 'bg-slate-700 text-slate-300'}`}>
+                                         {u.role === 'ADMIN' ? <ShieldCheck size={12}/> : <Shield size={12}/>}
+                                         {u.role}
+                                     </span>
+                                 </td>
+                             </tr>
+                         ))}
+                     </tbody>
+                 </table>
+             </div>
+        </div>
+
         {/* Houses Configuration */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
@@ -149,7 +176,7 @@ export const Settings: React.FC<SettingsProps> = ({
               <div key={idx} className="flex items-center justify-between bg-slate-950/50 border border-slate-800 p-3 rounded-lg group">
                 <span className="text-slate-300">{house}</span>
                 <button 
-                  onClick={() => handleRemoveHouse(idx)}
+                  onClick={() => handleRemoveHouse(house)}
                   className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   <Trash2 size={18} />
@@ -187,7 +214,7 @@ export const Settings: React.FC<SettingsProps> = ({
                    <span className="text-[10px] text-slate-600 font-mono">{type.value}</span>
                 </div>
                 <button 
-                  onClick={() => handleRemoveType(idx)}
+                  onClick={() => handleRemoveType(type.value, type.label)}
                   className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   <Trash2 size={18} />
@@ -292,7 +319,7 @@ export const Settings: React.FC<SettingsProps> = ({
                       </div>
                    </div>
                    <button 
-                      onClick={() => handleRemovePix(key.id)}
+                      onClick={() => handleRemovePix(key.id, key.name)}
                       className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <Trash2 size={16} />
