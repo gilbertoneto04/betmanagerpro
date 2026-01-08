@@ -1,14 +1,13 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Task, TaskStatus, TaskType, Pack, PixKey, User } from '../types';
-import { TASK_STATUS_LABELS } from '../constants';
+import { Task, TaskStatus, TaskType, Pack, PixKey, User as UserType } from '../types';
 import { StatusBadge } from './StatusBadge';
-import { CheckCircle2, Clock, PlayCircle, Plus, LayoutList, Layers, Trash2, AlertOctagon, Package, Landmark, Pencil, X, GripVertical, RotateCcw } from 'lucide-react';
+import { CheckCircle2, Clock, PlayCircle, Plus, LayoutList, Layers, Trash2, AlertOctagon, Package, Landmark, Pencil, X, GripVertical, RotateCcw, User } from 'lucide-react';
 
 interface TaskBoardProps {
   tasks: Task[];
   packs: Pack[];
   pixKeys: PixKey[];
-  currentUser: User | null;
+  currentUser: UserType | null;
   onUpdateStatus: (taskId: string, newStatus: TaskStatus) => void;
   onEditTask: (taskId: string, updates: Partial<Task>) => void;
   onFinishNewAccountTask: (taskId: string, accountsData: { name: string; email: string; depositValue: number }[], packId?: string) => void;
@@ -191,7 +190,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
   const FilterButton = ({ label, value, count }: { label: string, value: 'ALL' | 'UNFINISHED' | TaskStatus, count: number }) => (
     <button
       onClick={() => setFilter(value)}
-      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
         filter === value
           ? 'bg-slate-800 text-white border border-slate-700 shadow-sm'
           : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -311,17 +310,19 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
           <p className="text-slate-400 text-sm mt-1">Gerencie o fluxo de solicitações da operação (Arraste para reordenar)</p>
         </div>
         
-        <div className="flex flex-wrap gap-2">
-            <FilterButton 
-                label="Não Finalizadas" 
-                value="UNFINISHED" 
-                count={tasks.filter(t => t.status !== TaskStatus.FINALIZADA && t.status !== TaskStatus.EXCLUIDA).length} 
-            />
-            <FilterButton label="Todas" value="ALL" count={tasks.filter(t => t.status !== TaskStatus.EXCLUIDA).length} />
-            <FilterButton label="Pendentes" value={TaskStatus.PENDENTE} count={tasks.filter(t => t.status === TaskStatus.PENDENTE).length} />
-            <FilterButton label="Solicitadas" value={TaskStatus.SOLICITADA} count={tasks.filter(t => t.status === TaskStatus.SOLICITADA).length} />
-            <FilterButton label="Finalizadas" value={TaskStatus.FINALIZADA} count={tasks.filter(t => t.status === TaskStatus.FINALIZADA).length} />
-            <FilterButton label="Excluídas" value={TaskStatus.EXCLUIDA} count={tasks.filter(t => t.status === TaskStatus.EXCLUIDA).length} />
+        <div className="w-full sm:w-auto overflow-x-auto pb-2 -mb-2">
+            <div className="flex gap-2 min-w-max">
+                <FilterButton 
+                    label="Não Finalizadas" 
+                    value="UNFINISHED" 
+                    count={tasks.filter(t => t.status !== TaskStatus.FINALIZADA && t.status !== TaskStatus.EXCLUIDA).length} 
+                />
+                <FilterButton label="Todas" value="ALL" count={tasks.filter(t => t.status !== TaskStatus.EXCLUIDA).length} />
+                <FilterButton label="Pendentes" value={TaskStatus.PENDENTE} count={tasks.filter(t => t.status === TaskStatus.PENDENTE).length} />
+                <FilterButton label="Solicitadas" value={TaskStatus.SOLICITADA} count={tasks.filter(t => t.status === TaskStatus.SOLICITADA).length} />
+                <FilterButton label="Finalizadas" value={TaskStatus.FINALIZADA} count={tasks.filter(t => t.status === TaskStatus.FINALIZADA).length} />
+                <FilterButton label="Excluídas" value={TaskStatus.EXCLUIDA} count={tasks.filter(t => t.status === TaskStatus.EXCLUIDA).length} />
+            </div>
         </div>
       </div>
 
@@ -371,19 +372,32 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                 </div>
 
                 <div className="mb-4 pl-2">
-                  <h3 className="text-lg font-semibold text-slate-200 mb-1">{getTypeLabel(task.type)}</h3>
-                  <div className="flex items-center gap-2 text-sm text-slate-400">
-                    <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700/50">
-                      {task.house}
-                    </span>
-                    {task.type === TaskType.CONTA_NOVA ? (
-                      <span className="text-indigo-400 font-medium">
-                        {task.quantity} {task.quantity === 1 ? 'conta' : 'contas'}
-                      </span>
-                    ) : (
-                      <span className="font-mono text-slate-500">{task.accountName}</span>
-                    )}
+                  <h3 className="text-lg font-bold text-slate-100 mb-2">{getTypeLabel(task.type)}</h3>
+                  
+                  <div className="flex flex-col gap-2">
+                      {/* Account Name Highlight */}
+                      {task.type !== TaskType.CONTA_NOVA && (
+                        <div className="flex items-center gap-2 text-indigo-200 bg-indigo-900/20 px-3 py-2 rounded-lg border border-indigo-500/20 w-full">
+                            <User size={16} className="text-indigo-400 shrink-0" />
+                            <span className="font-semibold text-sm truncate" title={task.accountName}>
+                                {task.accountName || 'Conta Desconhecida'}
+                            </span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="px-2 py-1 rounded-md bg-slate-950 text-slate-400 border border-slate-800 text-[10px] uppercase font-bold tracking-wider">
+                            {task.house}
+                        </span>
+
+                        {task.type === TaskType.CONTA_NOVA && (
+                            <span className="text-xs text-indigo-400 font-medium bg-indigo-500/10 px-2 py-1 rounded border border-indigo-500/10">
+                            {task.quantity} {task.quantity === 1 ? 'conta' : 'contas'}
+                            </span>
+                        )}
+                      </div>
                   </div>
+
                   {task.description && (
                     <p className="mt-3 text-sm text-slate-400 bg-slate-800/50 p-3 rounded-lg border border-slate-800 italic">
                       "{task.description}"
@@ -391,12 +405,12 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                   )}
                   {task.pixKeyInfo && (
                       <div className="mt-3 text-xs bg-purple-500/10 border border-purple-500/20 text-purple-300 p-2 rounded-lg flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-2">
-                             <Landmark size={14} className="mt-0.5" />
-                             <span className="whitespace-pre-wrap">{task.pixKeyInfo}</span>
+                          <div className="flex items-start gap-2 min-w-0">
+                             <Landmark size={14} className="mt-0.5 shrink-0" />
+                             <span className="whitespace-pre-wrap break-all">{task.pixKeyInfo}</span>
                           </div>
                           {task.status !== TaskStatus.FINALIZADA && task.status !== TaskStatus.EXCLUIDA && (
-                              <button onClick={() => setEditingPixTask(task)} className="p-1 hover:bg-purple-500/20 rounded transition-colors" title="Editar Pix">
+                              <button onClick={() => setEditingPixTask(task)} className="p-1 hover:bg-purple-500/20 rounded transition-colors shrink-0" title="Editar Pix">
                                   <Pencil size={12} />
                               </button>
                           )}

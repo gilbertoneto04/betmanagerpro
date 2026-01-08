@@ -33,20 +33,28 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500/30">
       {/* Mobile Header */}
-      <div className="lg:hidden flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+      <div className="lg:hidden flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md sticky top-0 z-50">
         <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
           BetManager
         </h1>
-        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-slate-300">
+        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-slate-300 active:bg-slate-800 rounded-lg">
           {isMobileMenuOpen ? <X /> : <Menu />}
         </button>
       </div>
 
       <div className="flex h-screen overflow-hidden">
+        {/* Mobile Backdrop Overlay */}
+        {isMobileMenuOpen && (
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+        )}
+
         {/* Sidebar */}
         <aside
-          className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 border-r border-slate-800 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 ${
-            isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+          className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 flex flex-col ${
+            isMobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
           }`}
         >
           <div className="p-6">
@@ -54,7 +62,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
               BetManager
             </h1>
             
-            <nav className="space-y-2">
+            <nav className="space-y-2 overflow-y-auto max-h-[calc(100vh-180px)] lg:max-h-[calc(100vh-200px)]">
               <NavItem tab="DASHBOARD" icon={LayoutDashboard} label="Pendências" />
               <NavItem tab="NEW_REQUEST" icon={PlusCircle} label="Nova Solicitação" />
               <div className="pt-4 pb-2">
@@ -74,18 +82,18 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
             </nav>
           </div>
           
-          <div className="absolute bottom-0 w-full p-6 border-t border-slate-800">
+          <div className="mt-auto w-full p-6 border-t border-slate-800 bg-slate-900">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 text-slate-400">
                 <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold text-xs uppercase">
                   {user?.name.substring(0,2)}
                 </div>
-                <div className="flex flex-col">
+                <div className="flex flex-col min-w-0">
                   <span className="text-sm font-medium text-slate-200 truncate w-24">{user?.name}</span>
                   <span className="text-[10px] uppercase">{user?.role}</span>
                 </div>
               </div>
-              <button onClick={onLogout} className="text-slate-500 hover:text-red-400 transition-colors" title="Sair">
+              <button onClick={onLogout} className="text-slate-500 hover:text-red-400 transition-colors p-2" title="Sair">
                 <LogOut size={18} />
               </button>
             </div>
@@ -93,8 +101,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto bg-slate-950 relative w-full">
-          <div className="max-w-7xl mx-auto p-4 lg:p-8 pb-24">
+        <main className="flex-1 overflow-y-auto bg-slate-950 relative w-full scroll-smooth">
+          <div className="max-w-7xl mx-auto p-4 lg:p-8 pb-24 lg:pb-8">
             {children}
           </div>
         </main>

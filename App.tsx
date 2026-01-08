@@ -38,9 +38,12 @@ const App: React.FC = () => {
   const [houses, setHouses] = useState<string[]>([]); // Initialize empty, fill from DB
   const [rawHouses, setRawHouses] = useState<{id: string, name: string, order: number}[]>([]); // Keep track of IDs for sorting
   const [pixKeys, setPixKeys] = useState<PixKey[]>([]);
-  const [taskTypes, setTaskTypes] = useState<{ label: string, value: string }[]>(
-    Object.entries(TASK_TYPE_LABELS).map(([key, value]) => ({ label: value, value: key }))
+  
+  // Task Types State - Now includes ID and Order
+  const [taskTypes, setTaskTypes] = useState<{ id?: string, label: string, value: string, order?: number }[]>(
+    Object.entries(TASK_TYPE_LABELS).map(([key, value], index) => ({ label: value, value: key, order: index }))
   );
+  
   const [users, setUsers] = useState<User[]>([]);
 
   // --- Auth & Data Listeners ---
@@ -145,7 +148,15 @@ const App: React.FC = () => {
 
     const unsubTypes = onSnapshot(collection(db, 'config_types'), (snapshot) => {
         if (!snapshot.empty) {
-             setTaskTypes(snapshot.docs.map(d => d.data() as {label: string, value: string}));
+             const raw = snapshot.docs.map(d => ({
+                 id: d.id,
+                 label: d.data().label,
+                 value: d.data().value,
+                 order: d.data().order !== undefined ? d.data().order : 999
+             }));
+             // Sort by order
+             raw.sort((a, b) => (a.order || 0) - (b.order || 0));
+             setTaskTypes(raw);
         }
     }, handleError('config_types'));
 
@@ -230,6 +241,19 @@ const App: React.FC = () => {
         addLog(docRef.id, `Pack ${packData.house}`, `Novo pack criado: ${packData.quantity} contas`);
     } catch (e: any) {
         alert(`Erro ao criar pack: ${e.message}`);
+    }
+  };
+
+  const handleEditPack = async (packId: string, updates: Partial<Pack>) => {
+    try {
+        const packRef = doc(db, 'packs', packId);
+        await updateDoc(packRef, sanitizePayload({
+            ...updates,
+            updatedAt: new Date().toISOString()
+        }));
+        addLog(packId, 'Gestão de Packs', 'Pack atualizado por admin');
+    } catch (e: any) {
+        alert(`Erro ao editar pack: ${e.message}`);
     }
   };
 
@@ -367,7 +391,11 @@ const App: React.FC = () => {
           if(!acc) return;
 
           const accRef = doc(db, 'accounts', accountId);
-          await updateDoc(accRef, { status: 'LIMITED' });
+          // Atualiza status e data de limitação
+          await updateDoc(accRef, { 
+              status: 'LIMITED',
+              limitedAt: new Date().toISOString() 
+          });
 
           if (createWithdrawal) {
               await handleCreateTask({
@@ -544,9 +572,9 @@ const App: React.FC = () => {
               });
 
               // 4. Add Default Types
-              Object.entries(TASK_TYPE_LABELS).forEach(([key, value]) => {
+              Object.entries(TASK_TYPE_LABELS).forEach(([key, value], idx) => {
                   const docRef = doc(collection(db, 'config_types'));
-                  batch.set(docRef, { label: value, value: key });
+                  batch.set(docRef, { label: value, value: key, order: idx });
               });
 
               await batch.commit();
@@ -571,6 +599,23 @@ const App: React.FC = () => {
           await batch.commit();
       } catch (e) {
           console.error("Erro ao reordenar casas:", e);
+      }
+  };
+
+  const handleReorderTypes = async (newOrder: {id?: string, label: string, value: string}[]) => {
+      try {
+          const batch = writeBatch(db);
+          newOrder.forEach((typeObj, index) => {
+              // We need the ID to update Firestore. 
+              // If typeObj comes from the drag handler, it should have the ID if we passed the full object.
+              if (typeObj.id) {
+                  const ref = doc(db, 'config_types', typeObj.id);
+                  batch.update(ref, { order: index });
+              }
+          });
+          await batch.commit();
+      } catch (e) {
+          console.error("Erro ao reordenar tipos:", e);
       }
   };
 
@@ -620,6 +665,8 @@ const App: React.FC = () => {
              accounts={accounts}
              availableHouses={houses}
              onCreatePack={handleCreatePack}
+             onEditPack={handleEditPack}
+             currentUser={currentUser}
           />
       )}
       {activeTab === 'HISTORY' && <HistoryLog logs={logs} />}
@@ -684,6 +731,7 @@ const App: React.FC = () => {
             onReorderHouses={handleReorderHouses}
             taskTypes={taskTypes} 
             setTaskTypes={() => {}} 
+            onReorderTypes={handleReorderTypes}
             pixKeys={pixKeys}
             setPixKeys={() => {}}
             currentUser={currentUser}
@@ -699,6 +747,7 @@ const App: React.FC = () => {
             tasks={tasks} 
             accounts={accounts} 
             availableHouses={houses}
+            packs={packs}
           />
       )}
     </Layout>

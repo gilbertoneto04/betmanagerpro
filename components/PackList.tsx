@@ -1,32 +1,65 @@
-import React, { useState } from 'react';
-import { Pack, Account } from '../types';
-import { Package, Plus, ChevronDown, ChevronUp, CheckCircle2, DollarSign, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Pack, Account, User } from '../types';
+import { Package, Plus, ChevronDown, ChevronUp, CheckCircle2, DollarSign, RefreshCw, Pencil, X, Tag, CreditCard, Ban, Trash2 } from 'lucide-react';
 
 interface PackListProps {
   packs: Pack[];
   accounts: Account[];
   availableHouses: string[];
+  currentUser: User | null;
   onCreatePack: (packData: { house: string; quantity: number; price: number }) => void;
+  onEditPack?: (packId: string, updates: Partial<Pack>) => void;
 }
 
-export const PackList: React.FC<PackListProps> = ({ packs, accounts, availableHouses, onCreatePack }) => {
+export const PackList: React.FC<PackListProps> = ({ packs, accounts, availableHouses, currentUser, onCreatePack, onEditPack }) => {
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'COMPLETED'>('ACTIVE');
   const [isCreating, setIsCreating] = useState(false);
   const [expandedPack, setExpandedPack] = useState<string | null>(null);
+  
+  // Edit State
+  const [editingPack, setEditingPack] = useState<Pack | null>(null);
 
   // Form State
   const [house, setHouse] = useState(availableHouses[0] || '');
   const [quantity, setQuantity] = useState(10);
   const [price, setPrice] = useState(0);
 
+  useEffect(() => {
+    if (availableHouses.length > 0 && !house) {
+        setHouse(availableHouses[0]);
+    }
+  }, [availableHouses]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (house && quantity > 0) {
       onCreatePack({ house, quantity, price });
       setIsCreating(false);
+      resetForm();
+    }
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (editingPack && onEditPack && house && quantity > 0) {
+          onEditPack(editingPack.id, { house, quantity, price });
+          setEditingPack(null);
+          resetForm();
+      }
+  };
+
+  const startEdit = (e: React.MouseEvent, pack: Pack) => {
+      e.stopPropagation();
+      setEditingPack(pack);
+      setHouse(pack.house);
+      setQuantity(pack.quantity);
+      setPrice(pack.price);
+  };
+
+  const resetForm = () => {
+      setHouse(availableHouses[0] || '');
       setQuantity(10);
       setPrice(0);
-    }
   };
 
   const filteredPacks = packs.filter(p => p.status === activeTab).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -38,6 +71,16 @@ export const PackList: React.FC<PackListProps> = ({ packs, accounts, availableHo
   const calculateProgress = (pack: Pack) => {
     return Math.min(100, Math.round((pack.delivered / pack.quantity) * 100));
   };
+  
+  const getStatusColor = (status: string) => {
+      switch(status) {
+          case 'ACTIVE': return 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10';
+          case 'LIMITED': return 'text-amber-400 border-amber-500/30 bg-amber-500/10';
+          case 'REPLACEMENT': return 'text-rose-400 border-rose-500/30 bg-rose-500/10';
+          case 'DELETED': return 'text-red-400 border-red-500/30 bg-red-500/10';
+          default: return 'text-slate-400 border-slate-700 bg-slate-800';
+      }
+  };
 
   return (
     <div className="space-y-6">
@@ -47,7 +90,7 @@ export const PackList: React.FC<PackListProps> = ({ packs, accounts, availableHo
           <p className="text-slate-400 text-sm mt-1">Gerencie a compra e entrega de lotes de contas</p>
         </div>
         <button 
-          onClick={() => setIsCreating(true)}
+          onClick={() => { setIsCreating(true); resetForm(); }}
           className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-500/20 transition-all"
         >
           <Plus size={18} />
@@ -94,9 +137,19 @@ export const PackList: React.FC<PackListProps> = ({ packs, accounts, availableHo
             return (
               <div key={pack.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm hover:border-indigo-500/30 transition-all">
                 <div 
-                   className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer"
+                   className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer relative"
                    onClick={() => setExpandedPack(isExpanded ? null : pack.id)}
                 >
+                   {currentUser?.role === 'ADMIN' && onEditPack && (
+                       <button 
+                          onClick={(e) => startEdit(e, pack)}
+                          className="absolute top-4 right-4 p-2 text-slate-500 hover:text-white bg-slate-800 rounded-lg hover:bg-slate-700 z-10"
+                          title="Editar Pack"
+                       >
+                           <Pencil size={16} />
+                       </button>
+                   )}
+
                    <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-indigo-400 border border-slate-700">
                         <Package size={24} />
@@ -141,18 +194,54 @@ export const PackList: React.FC<PackListProps> = ({ packs, accounts, availableHo
                         Histórico de Contas ({packAccounts.length})
                      </h4>
                      {packAccounts.length > 0 ? (
-                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                           {packAccounts.map(acc => (
-                             <div key={acc.id} className={`border p-3 rounded-lg text-sm relative ${acc.status === 'REPLACEMENT' ? 'bg-rose-500/10 border-rose-500/30' : 'bg-slate-900 border-slate-800'}`}>
-                                {acc.status === 'REPLACEMENT' && (
-                                    <div className="absolute top-2 right-2 text-rose-500" title="Conta em Reposição">
-                                        <RefreshCw size={14} />
+                             <div key={acc.id} className="bg-slate-900 border border-slate-800 rounded-lg p-3 text-sm hover:border-slate-700 transition-colors">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div className="font-bold text-white truncate max-w-[120px]">{acc.name}</div>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${getStatusColor(acc.status)}`}>
+                                        {acc.status}
+                                    </span>
+                                </div>
+                                
+                                <div className="space-y-1.5 mb-2">
+                                    <div className="text-slate-400 text-xs flex items-center gap-1.5 truncate" title={acc.email}>
+                                        <span className="opacity-50">@</span> {acc.email}
+                                    </div>
+                                    {acc.password && (
+                                        <div className="text-slate-500 text-xs flex items-center gap-1.5">
+                                            <span className="opacity-50">Pw:</span> ••••••••
+                                        </div>
+                                    )}
+                                    <div className="text-emerald-400 text-xs flex items-center gap-1.5">
+                                        <DollarSign size={10} /> 
+                                        {acc.depositValue.toFixed(2)}
+                                    </div>
+                                </div>
+
+                                {/* Tags & Info */}
+                                {(acc.tags.length > 0 || acc.card) && (
+                                    <div className="pt-2 border-t border-slate-800/50 flex flex-col gap-2">
+                                        {acc.tags.length > 0 && (
+                                            <div className="flex flex-wrap gap-1">
+                                                {acc.tags.map(t => (
+                                                    <span key={t} className="text-[9px] bg-indigo-500/10 text-indigo-300 px-1 rounded flex items-center gap-0.5">
+                                                        <Tag size={8} /> {t}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {acc.card && (
+                                            <div className="text-[10px] text-slate-500 italic bg-slate-800/50 p-1.5 rounded flex items-start gap-1">
+                                                <CreditCard size={10} className="mt-0.5 shrink-0" />
+                                                <span className="truncate">{acc.card}</span>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
-                                <div className={`font-medium ${acc.status === 'REPLACEMENT' ? 'text-rose-200' : 'text-white'}`}>{acc.name}</div>
-                                <div className="text-slate-500 text-xs">{acc.email}</div>
-                                <div className="text-slate-600 text-[10px] mt-1">
-                                  {new Date(acc.createdAt).toLocaleString('pt-BR')}
+                                
+                                <div className="mt-2 text-[9px] text-slate-600 text-right">
+                                    Criada: {new Date(acc.createdAt).toLocaleDateString()}
                                 </div>
                              </div>
                           ))}
@@ -168,12 +257,14 @@ export const PackList: React.FC<PackListProps> = ({ packs, accounts, availableHo
         )}
       </div>
 
-      {/* Create Modal */}
-      {isCreating && (
+      {/* Create / Edit Modal */}
+      {(isCreating || editingPack) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <h3 className="text-xl font-bold text-white mb-6">Novo Pack de Contas</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <h3 className="text-xl font-bold text-white mb-6">
+                {editingPack ? 'Editar Pack' : 'Novo Pack de Contas'}
+            </h3>
+            <form onSubmit={editingPack ? handleEditSubmit : handleSubmit} className="space-y-4">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-400">Casa de Aposta</label>
                 <select
@@ -210,11 +301,11 @@ export const PackList: React.FC<PackListProps> = ({ packs, accounts, availableHo
 
               <div className="pt-4 flex gap-3">
                 <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl transition-colors">
-                  Criar Pack
+                  {editingPack ? 'Salvar Alterações' : 'Criar Pack'}
                 </button>
                 <button 
                   type="button" 
-                  onClick={() => setIsCreating(false)} 
+                  onClick={() => { setIsCreating(false); setEditingPack(null); }} 
                   className="px-6 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-3 rounded-xl transition-colors"
                 >
                   Cancelar

@@ -69,6 +69,7 @@ export interface Account {
   house: string;
   depositValue: number;
   status: 'ACTIVE' | 'LIMITED' | 'REPLACEMENT' | 'DELETED';
+  limitedAt?: string; // Date when account became limited
   deletionReason?: string;
   owner?: string;
   tags: string[];

@@ -8,8 +8,9 @@ interface SettingsProps {
   houses: string[];
   setHouses: (houses: string[]) => void;
   onReorderHouses?: (newHouses: string[]) => void;
-  taskTypes: { label: string; value: string }[];
+  taskTypes: { id?: string, label: string; value: string, order?: number }[];
   setTaskTypes: (types: { label: string; value: string }[]) => void;
+  onReorderTypes?: (newTypes: { id?: string, label: string; value: string, order?: number }[]) => void;
   pixKeys: PixKey[];
   setPixKeys: (keys: PixKey[]) => void;
   currentUser: UserType | null;
@@ -25,6 +26,7 @@ export const Settings: React.FC<SettingsProps> = ({
   setHouses,
   onReorderHouses,
   taskTypes, 
+  onReorderTypes,
   pixKeys,
   currentUser, users, onUpdateUser, onUpdateUserRole,
   onReset,
@@ -39,8 +41,9 @@ export const Settings: React.FC<SettingsProps> = ({
   const [pixKeyType, setPixKeyType] = useState<PixKey['keyType']>('CPF');
   const [pixKey, setPixKey] = useState('');
 
-  // Drag State for Houses
+  // Drag State
   const [draggedHouseIndex, setDraggedHouseIndex] = useState<number | null>(null);
+  const [draggedTypeIndex, setDraggedTypeIndex] = useState<number | null>(null);
 
   // --- Houses ---
   const handleAddHouse = async (e: React.FormEvent) => {
@@ -65,6 +68,7 @@ export const Settings: React.FC<SettingsProps> = ({
   const handleHouseDragStart = (e: React.DragEvent, index: number) => {
       setDraggedHouseIndex(index);
       e.dataTransfer.effectAllowed = "move";
+      // Hack to hide ghost image on some browsers or set custom
   };
 
   const handleHouseDragOver = (e: React.DragEvent) => {
@@ -79,8 +83,6 @@ export const Settings: React.FC<SettingsProps> = ({
       const [draggedItem] = newHouses.splice(draggedHouseIndex, 1);
       newHouses.splice(targetIndex, 0, draggedItem);
       
-      // Optimistic visual update is tricky with parent props, 
-      // but we call the parent handler to save it to DB
       if (onReorderHouses) {
           onReorderHouses(newHouses);
       }
@@ -92,7 +94,11 @@ export const Settings: React.FC<SettingsProps> = ({
     e.preventDefault();
     if (newTypeLabel.trim()) {
       const val = newTypeLabel.trim().toUpperCase().replace(/\s+/g, '_');
-      await addDoc(collection(db, 'config_types'), { label: newTypeLabel.trim(), value: val });
+      await addDoc(collection(db, 'config_types'), { 
+          label: newTypeLabel.trim(), 
+          value: val,
+          order: taskTypes.length 
+      });
       logAction('Configuração: Tipos', `Adicionou o tipo: ${newTypeLabel.trim()}`);
       setNewTypeLabel('');
     }
@@ -105,6 +111,29 @@ export const Settings: React.FC<SettingsProps> = ({
         await deleteDoc(doc(db, 'config_types', d.id));
     });
     logAction('Configuração: Tipos', `Removeu o tipo: ${typeLabel}`);
+  };
+
+  const handleTypeDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedTypeIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleTypeDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleTypeDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedTypeIndex === null || draggedTypeIndex === targetIndex) return;
+    
+    const newTypes = [...taskTypes];
+    const [draggedItem] = newTypes.splice(draggedTypeIndex, 1);
+    newTypes.splice(targetIndex, 0, draggedItem);
+    
+    if (onReorderTypes) {
+        onReorderTypes(newTypes);
+    }
+    setDraggedTypeIndex(null);
   };
 
   // --- Pix Keys ---
@@ -140,7 +169,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-10">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
            <h2 className="text-2xl font-bold text-white mb-2">Configurações</h2>
            <p className="text-slate-400">Gerencie as opções disponíveis no sistema.</p>
@@ -148,7 +177,7 @@ export const Settings: React.FC<SettingsProps> = ({
         {onReset && (
             <button 
                 onClick={onReset}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-700 hover:border-slate-500 transition-all text-sm"
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-700 hover:border-slate-500 transition-all text-sm w-full md:w-auto justify-center"
             >
                 <RotateCcw size={16} />
                 Restaurar Padrões
@@ -165,7 +194,7 @@ export const Settings: React.FC<SettingsProps> = ({
                 Gestão de Usuários ({users.length})
              </h3>
              <div className="overflow-x-auto">
-                 <table className="w-full text-left text-sm">
+                 <table className="w-full text-left text-sm min-w-[600px]">
                      <thead className="text-slate-500 font-medium border-b border-slate-800">
                          <tr>
                              <th className="pb-3 pl-2">Nome</th>
@@ -235,7 +264,7 @@ export const Settings: React.FC<SettingsProps> = ({
                 onDragStart={(e) => handleHouseDragStart(e, idx)}
                 onDragOver={handleHouseDragOver}
                 onDrop={(e) => handleHouseDrop(e, idx)}
-                className={`flex items-center justify-between bg-slate-950/50 border border-slate-800 p-3 rounded-lg group cursor-move ${draggedHouseIndex === idx ? 'opacity-50 ring-2 ring-indigo-500' : ''}`}
+                className={`flex items-center justify-between bg-slate-950/50 border border-slate-800 p-3 rounded-lg group cursor-move touch-none ${draggedHouseIndex === idx ? 'opacity-50 ring-2 ring-indigo-500' : ''}`}
               >
                 <div className="flex items-center gap-2">
                     <GripVertical size={16} className="text-slate-600" />
@@ -254,10 +283,13 @@ export const Settings: React.FC<SettingsProps> = ({
 
         {/* Task Types Configuration */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <span className="w-1.5 h-6 bg-blue-500 rounded-full"></span>
-            Tipos de Pendência
-          </h3>
+          <div className="flex justify-between items-start mb-4">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <span className="w-1.5 h-6 bg-blue-500 rounded-full"></span>
+                Tipos de Pendência
+              </h3>
+              <span className="text-[10px] text-slate-500 max-w-[120px] text-right">Arraste para reordenar</span>
+          </div>
           
           <form onSubmit={handleAddType} className="flex gap-2 mb-6">
             <input
@@ -274,10 +306,20 @@ export const Settings: React.FC<SettingsProps> = ({
 
           <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
             {taskTypes.map((type, idx) => (
-              <div key={idx} className="flex items-center justify-between bg-slate-950/50 border border-slate-800 p-3 rounded-lg group">
-                <div>
-                   <span className="text-slate-300 block">{type.label}</span>
-                   <span className="text-[10px] text-slate-600 font-mono">{type.value}</span>
+              <div 
+                key={type.id || idx}
+                draggable
+                onDragStart={(e) => handleTypeDragStart(e, idx)}
+                onDragOver={handleTypeDragOver}
+                onDrop={(e) => handleTypeDrop(e, idx)}
+                className={`flex items-center justify-between bg-slate-950/50 border border-slate-800 p-3 rounded-lg group cursor-move touch-none ${draggedTypeIndex === idx ? 'opacity-50 ring-2 ring-indigo-500' : ''}`}
+              >
+                <div className="flex items-center gap-2">
+                   <GripVertical size={16} className="text-slate-600" />
+                   <div>
+                       <span className="text-slate-300 block">{type.label}</span>
+                       <span className="text-[10px] text-slate-600 font-mono">{type.value}</span>
+                   </div>
                 </div>
                 <button 
                   onClick={() => handleRemoveType(type.value, type.label)}
@@ -298,9 +340,9 @@ export const Settings: React.FC<SettingsProps> = ({
           </h3>
           
           {currentUser && (
-              <div className="mb-6 p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl flex items-center justify-between gap-4">
+              <div className="mb-6 p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                      <User className="text-purple-400" size={20} />
+                      <User className="text-purple-400 shrink-0" size={20} />
                       <div>
                           <p className="text-sm font-semibold text-white">Chave Padrão para {currentUser.name}</p>
                           <p className="text-xs text-slate-400">Essa chave será selecionada automaticamente ao realizar saques.</p>
@@ -309,7 +351,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   <select
                     value={currentUser.defaultPixKeyId || ''}
                     onChange={handleDefaultKeyChange}
-                    className="bg-slate-900 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
+                    className="w-full sm:w-auto bg-slate-900 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
                   >
                       <option value="">Sem padrão</option>
                       {pixKeys.map(k => (
@@ -336,7 +378,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   required
                   value={pixBank}
                   onChange={(e) => setPixBank(e.target.value)}
-                  placeholder="Banco (ex: Nu, Inter)"
+                  placeholder="Banco (ex: Nu)"
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-indigo-500"
                 />
              </div>
@@ -349,7 +391,7 @@ export const Settings: React.FC<SettingsProps> = ({
                    <option value="CPF">CPF</option>
                    <option value="CNPJ">CNPJ</option>
                    <option value="EMAIL">Email</option>
-                   <option value="TELEFONE">Telefone</option>
+                   <option value="TELEFONE">Tel</option>
                    <option value="ALEATORIA">Aleatória</option>
                 </select>
              </div>
@@ -370,23 +412,23 @@ export const Settings: React.FC<SettingsProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[300px] overflow-y-auto">
              {pixKeys.map((key) => (
-                <div key={key.id} className="bg-slate-950/50 border border-slate-800 p-3 rounded-lg flex justify-between items-start group">
-                   <div className="flex items-start gap-3">
-                      <div className="mt-1 text-purple-400">
+                <div key={key.id} className="bg-slate-950/50 border border-slate-800 p-3 rounded-lg flex justify-between items-start group min-w-0">
+                   <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <div className="mt-1 text-purple-400 shrink-0">
                          <Landmark size={18} />
                       </div>
-                      <div>
-                         <p className="text-sm font-semibold text-slate-200">{key.name}</p>
-                         <p className="text-xs text-slate-500">{key.bank}</p>
-                         <div className="mt-1 flex gap-1 items-center">
-                            <span className="text-[10px] bg-slate-800 px-1 rounded text-slate-400">{key.keyType}</span>
-                            <span className="text-xs text-slate-300 font-mono">{key.key}</span>
+                      <div className="min-w-0 flex-1">
+                         <p className="text-sm font-semibold text-slate-200 truncate">{key.name}</p>
+                         <p className="text-xs text-slate-500 truncate">{key.bank}</p>
+                         <div className="mt-1 flex gap-1 items-center min-w-0">
+                            <span className="text-[10px] bg-slate-800 px-1 rounded text-slate-400 shrink-0">{key.keyType}</span>
+                            <span className="text-xs text-slate-300 font-mono break-all line-clamp-2" title={key.key}>{key.key}</span>
                          </div>
                       </div>
                    </div>
                    <button 
                       onClick={() => handleRemovePix(key.id, key.name)}
-                      className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2"
                     >
                       <Trash2 size={16} />
                     </button>
