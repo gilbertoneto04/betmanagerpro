@@ -12,7 +12,7 @@ import { Task, LogEntry, TaskStatus, TabView, TaskType, Account, Pack, User, Pix
 import { TASK_TYPE_LABELS, TASK_STATUS_LABELS, MOCK_HOUSES } from './constants';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc, writeBatch } from 'firebase/firestore';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -65,7 +65,16 @@ const App: React.FC = () => {
 
     // Tasks Listener
     const unsubTasks = onSnapshot(collection(db, 'tasks'), (snapshot) => {
-      setTasks(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Task)));
+      const loadedTasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Task));
+      // Sort priority: orderIndex (desc) -> createdAt (desc)
+      // High orderIndex comes first (top of list)
+      loadedTasks.sort((a, b) => {
+          const orderA = a.orderIndex !== undefined ? a.orderIndex : 0;
+          const orderB = b.orderIndex !== undefined ? b.orderIndex : 0;
+          if (orderA !== orderB) return orderB - orderA;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+      setTasks(loadedTasks);
     });
 
     // Accounts Listener
@@ -92,14 +101,10 @@ const App: React.FC = () => {
       setUsers(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User)));
     });
     
-    // For single document configs like Houses/Types, we can use a collection 'config' with doc 'main'
-    // Or just store separate collections if we want them scalable. Let's keep separate collections for simplicity in migration.
     const unsubHouses = onSnapshot(collection(db, 'config_houses'), (snapshot) => {
-        // Assuming documents like { name: 'Bet365' }
         if (!snapshot.empty) {
             setHouses(snapshot.docs.map(d => d.data().name));
         } else {
-             // If empty (first run), initialize with default
              MOCK_HOUSES.forEach(h => addDoc(collection(db, 'config_houses'), { name: h }));
         }
     });
@@ -148,12 +153,21 @@ const App: React.FC = () => {
       const userRef = doc(db, 'users', updatedUser.id);
       await updateDoc(userRef, { ...updatedUser });
   };
+  
+  const handleUpdateUserRole = async (userId: string, newRole: 'ADMIN' | 'USER') => {
+      if (currentUser?.role !== 'ADMIN') return; // Security check
+      
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, { role: newRole });
+      addLog('SYSTEM', 'Gestão de Usuários', `Alterou cargo do usuário para ${newRole}`);
+  };
 
   // --- Handlers ---
 
   const handleCreateTask = async (newTaskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => {
     const newTask = {
       ...newTaskData,
+      orderIndex: Date.now(), // Use timestamp as simple default order (newest on top)
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -201,6 +215,27 @@ const App: React.FC = () => {
          addLog(taskId, `Edição - ${task.house}`, `Chave Pix atualizada.`);
     }
   }, [tasks]);
+
+  const handleReorderTasks = async (draggedTaskId: string, targetTaskId: string) => {
+    const draggedTask = tasks.find(t => t.id === draggedTaskId);
+    const targetTask = tasks.find(t => t.id === targetTaskId);
+
+    if (!draggedTask || !targetTask || draggedTaskId === targetTaskId) return;
+
+    // Swap orderIndex Logic
+    const draggedOrder = draggedTask.orderIndex || 0;
+    const targetOrder = targetTask.orderIndex || 0;
+
+    const batch = writeBatch(db);
+    
+    const draggedRef = doc(db, 'tasks', draggedTaskId);
+    const targetRef = doc(db, 'tasks', targetTaskId);
+
+    batch.update(draggedRef, { orderIndex: targetOrder });
+    batch.update(targetRef, { orderIndex: draggedOrder });
+
+    await batch.commit();
+  };
 
   const handleDeleteTask = async (taskId: string, reason?: string) => {
     const task = tasks.find(t => t.id === taskId);
@@ -349,33 +384,11 @@ const App: React.FC = () => {
   };
 
   // --- Settings Handlers ---
-  // Using simplified logic for settings to map to DB
   
   const setHousesHandler = (newHouses: string[]) => {
-      // This is a bit inefficient (delete all write all), but fine for small list.
-      // Better way: identify added/removed.
-      // For simplicity in this demo, let's just create new ones if not exist? 
-      // Actually, let's handle add/remove in the Settings component directly via specialized calls if possible,
-      // But Settings expects a setter. Let's hack it:
-      
-      // We will only support ADDITION via this setter if the array grew
       if (newHouses.length > houses.length) {
           const added = newHouses[newHouses.length - 1];
           addDoc(collection(db, 'config_houses'), { name: added });
-      } else if (newHouses.length < houses.length) {
-          // Find removed. This is hard without IDs. 
-          // Ideally Settings should pass the ID to remove.
-          // Since we are changing architecture, we might need to update Settings.tsx to handle DB deletes better.
-          // For now, let's assume we can query by name to delete (risky but works for MVP)
-          const removed = houses.find(h => !newHouses.includes(h));
-          if (removed) {
-              // find doc with this name
-               // We can't do async easily inside a sync setter.
-               // We will patch this by updating Settings component in next step if needed, 
-               // OR implementing a custom logic here.
-               // Let's rely on the fact that we can fetch the snapshot in the useEffect
-               // To delete, we need a query.
-          }
       }
   };
 
@@ -406,6 +419,7 @@ const App: React.FC = () => {
             onEditTask={handleEditTask}
             onDeleteTask={handleDeleteTask}
             onFinishNewAccountTask={handleFinishNewAccountTask} 
+            onReorderTasks={handleReorderTasks}
             availableTypes={taskTypes}
           />
       )}
@@ -467,14 +481,15 @@ const App: React.FC = () => {
       {activeTab === 'SETTINGS' && (
           <Settings 
             houses={houses} 
-            setHouses={setHousesHandler} // Note: Basic impl
+            setHouses={setHousesHandler}
             taskTypes={taskTypes} 
-            setTaskTypes={() => {}} // Note: Read-only for now in this quick migration or implement addDoc
+            setTaskTypes={() => {}} 
             pixKeys={pixKeys}
-            setPixKeys={() => {}} // Implemented via specialized add/remove in Settings component
+            setPixKeys={() => {}}
             currentUser={currentUser}
             users={users}
             onUpdateUser={handleUpdateUser}
+            onUpdateUserRole={handleUpdateUserRole}
             logAction={handleSettingsLog}
           />
       )}

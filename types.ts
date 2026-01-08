@@ -44,6 +44,7 @@ export interface Task {
   pixKeyInfo?: string;
   status: TaskStatus;
   deletionReason?: string;
+  orderIndex?: number; // Added for DnD
   createdAt: string;
   updatedAt: string;
 }

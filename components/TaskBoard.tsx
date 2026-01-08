@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Task, TaskStatus, TaskType, Pack, PixKey, User } from '../types';
 import { TASK_STATUS_LABELS } from '../constants';
 import { StatusBadge } from './StatusBadge';
-import { CheckCircle2, Clock, PlayCircle, Plus, LayoutList, Layers, Trash2, AlertOctagon, Package, Landmark, Pencil, X } from 'lucide-react';
+import { CheckCircle2, Clock, PlayCircle, Plus, LayoutList, Layers, Trash2, AlertOctagon, Package, Landmark, Pencil, X, GripVertical } from 'lucide-react';
 
 interface TaskBoardProps {
   tasks: Task[];
@@ -13,10 +13,11 @@ interface TaskBoardProps {
   onEditTask: (taskId: string, updates: Partial<Task>) => void;
   onFinishNewAccountTask: (taskId: string, accountsData: { name: string; email: string; depositValue: number }[], packId?: string) => void;
   onDeleteTask: (taskId: string, reason?: string) => void;
+  onReorderTasks: (draggedId: string, targetId: string) => void;
   availableTypes: { label: string, value: string }[];
 }
 
-export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, currentUser, onUpdateStatus, onEditTask, onFinishNewAccountTask, onDeleteTask, availableTypes }) => {
+export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, currentUser, onUpdateStatus, onEditTask, onFinishNewAccountTask, onDeleteTask, onReorderTasks, availableTypes }) => {
   // Default filter is 'UNFINISHED' (Não Finalizadas)
   const [filter, setFilter] = React.useState<'ALL' | 'UNFINISHED' | TaskStatus>('UNFINISHED');
   
@@ -39,6 +40,9 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
   const [pixSelectionMode, setPixSelectionMode] = useState<'SAVED' | 'NEW'>('SAVED');
   const [selectedPixId, setSelectedPixId] = useState('');
   const [newPixString, setNewPixString] = useState('');
+
+  // DnD State
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
 
   // Reset pack selection when modal opens
   useEffect(() => {
@@ -69,16 +73,38 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
   }, [editingPixTask, currentUser]);
 
   const filteredTasks = useMemo(() => {
-    let sorted = [...tasks].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    // Tasks are already sorted by App.tsx, but filter keeps order
+    let list = [...tasks];
     
     if (filter === 'ALL') {
-        return sorted.filter(t => t.status !== TaskStatus.EXCLUIDA);
+        return list.filter(t => t.status !== TaskStatus.EXCLUIDA);
     }
     
-    if (filter === 'UNFINISHED') return sorted.filter(t => t.status !== TaskStatus.FINALIZADA && t.status !== TaskStatus.EXCLUIDA);
+    if (filter === 'UNFINISHED') return list.filter(t => t.status !== TaskStatus.FINALIZADA && t.status !== TaskStatus.EXCLUIDA);
     
-    return sorted.filter(t => t.status === filter);
+    return list.filter(t => t.status === filter);
   }, [tasks, filter]);
+
+  // DnD Handlers
+  const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    e.dataTransfer.setData('taskId', taskId);
+    setDraggedTaskId(taskId);
+    // Needed for Firefox to allow drag
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault(); // Necessary to allow dropping
+  };
+
+  const handleDrop = (e: React.DragEvent, targetTaskId: string) => {
+    e.preventDefault();
+    const sourceTaskId = e.dataTransfer.getData('taskId');
+    if (sourceTaskId && sourceTaskId !== targetTaskId) {
+        onReorderTasks(sourceTaskId, targetTaskId);
+    }
+    setDraggedTaskId(null);
+  };
 
   const handleAction = (task: Task, action: 'SOLICITADA' | 'PENDENTE' | 'FINALIZADA') => {
     onUpdateStatus(task.id, action as TaskStatus);
@@ -273,7 +299,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-white">Quadro de Pendências</h2>
-          <p className="text-slate-400 text-sm mt-1">Gerencie o fluxo de solicitações da operação</p>
+          <p className="text-slate-400 text-sm mt-1">Gerencie o fluxo de solicitações da operação (Arraste para reordenar)</p>
         </div>
         
         <div className="flex flex-wrap gap-2">
@@ -304,10 +330,14 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
         ) : (
           filteredTasks.map((task) => (
             <div 
-              key={task.id} 
-              className={`group bg-slate-900 border rounded-xl p-5 shadow-sm transition-all flex flex-col justify-between relative ${
+              key={task.id}
+              draggable
+              onDragStart={(e) => handleDragStart(e, task.id)}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, task.id)}
+              className={`group bg-slate-900 border rounded-xl p-5 shadow-sm transition-all flex flex-col justify-between relative cursor-grab active:cursor-grabbing ${
                   task.status === TaskStatus.EXCLUIDA ? 'border-red-900/30 opacity-70' : 'border-slate-800 hover:border-indigo-500/30 hover:shadow-lg hover:shadow-indigo-500/5'
-              }`}
+              } ${draggedTaskId === task.id ? 'opacity-50 ring-2 ring-indigo-500' : ''}`}
             >
               {task.status !== TaskStatus.EXCLUIDA && (
                   <button 
@@ -318,16 +348,20 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                       <Trash2 size={16} />
                   </button>
               )}
+              
+              <div className="absolute top-1/2 left-1 -translate-y-1/2 text-slate-700 opacity-0 group-hover:opacity-50">
+                 <GripVertical size={16} />
+              </div>
 
               <div>
-                <div className="flex justify-between items-start mb-4">
+                <div className="flex justify-between items-start mb-4 pl-2">
                   <StatusBadge status={task.status} />
                   <span className="text-xs text-slate-500 font-mono pr-6">
                     {new Date(task.createdAt).toLocaleDateString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
 
-                <div className="mb-4">
+                <div className="mb-4 pl-2">
                   <h3 className="text-lg font-semibold text-slate-200 mb-1">{getTypeLabel(task.type)}</h3>
                   <div className="flex items-center gap-2 text-sm text-slate-400">
                     <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700/50">
@@ -362,7 +396,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-800 grid grid-cols-2 gap-2">
+              <div className="pt-4 border-t border-slate-800 grid grid-cols-2 gap-2 pl-2">
                 {renderTaskActions(task)}
               </div>
             </div>

@@ -2,14 +2,14 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// SUBSTITUA COM SUAS CHAVES DO CONSOLE DO FIREBASE
+// Configuração preenchida com base no ID do projeto fornecido
 const firebaseConfig = {
   apiKey: "AIzaSyBIdLRqRg5dTyD3A2YNkbGed6RhyXnDXLY",
-  authDomain: "SEU_PROJETO.firebaseapp.com",
+  authDomain: "betmanager-2814a.firebaseapp.com",
   projectId: "betmanager-2814a",
-  storageBucket: "SEU_PROJETO.appspot.com",
-  messagingSenderId: "SEU_MESSAGING_ID",
-  appId: "SEU_APP_ID"
+  storageBucket: "betmanager-2814a.appspot.com",
+  messagingSenderId: "SEU_MESSAGING_ID", // Opcional para Firestore/Auth basico
+  appId: "SEU_APP_ID" // Opcional para Web basico
 };
 
 const app = initializeApp(firebaseConfig);

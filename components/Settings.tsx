@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { Trash2, Plus, RotateCcw, Landmark, User, Shield, ShieldCheck } from 'lucide-react';
+import { Trash2, Plus, RotateCcw, Landmark, User, Shield, ShieldCheck, GripVertical } from 'lucide-react';
 import { PixKey, User as UserType } from '../types';
 import { db } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, query, where, getDocs } from 'firebase/firestore';
 
 interface SettingsProps {
   houses: string[];
-  setHouses: (houses: string[]) => void; // Legacy signature, we will bypass for DB ops
+  setHouses: (houses: string[]) => void;
   taskTypes: { label: string; value: string }[];
   setTaskTypes: (types: { label: string; value: string }[]) => void;
   pixKeys: PixKey[];
@@ -14,15 +14,17 @@ interface SettingsProps {
   currentUser: UserType | null;
   users: UserType[]; 
   onUpdateUser: (user: UserType) => void;
+  onUpdateUserRole: (userId: string, newRole: 'ADMIN' | 'USER') => void;
   onReset?: () => void;
   logAction: (description: string, action: string) => void;
 }
 
 export const Settings: React.FC<SettingsProps> = ({ 
   houses, 
+  setHouses,
   taskTypes, 
   pixKeys,
-  currentUser, users, onUpdateUser,
+  currentUser, users, onUpdateUser, onUpdateUserRole,
   logAction 
 }) => {
   const [newHouse, setNewHouse] = useState('');
@@ -33,6 +35,9 @@ export const Settings: React.FC<SettingsProps> = ({
   const [pixBank, setPixBank] = useState('');
   const [pixKeyType, setPixKeyType] = useState<PixKey['keyType']>('CPF');
   const [pixKey, setPixKey] = useState('');
+
+  // Drag State for Houses
+  const [draggedHouseIndex, setDraggedHouseIndex] = useState<number | null>(null);
 
   // --- Houses ---
   const handleAddHouse = async (e: React.FormEvent) => {
@@ -45,13 +50,34 @@ export const Settings: React.FC<SettingsProps> = ({
   };
 
   const handleRemoveHouse = async (houseName: string) => {
-    // Need to find the doc first since we only passed string array
     const q = query(collection(db, 'config_houses'), where("name", "==", houseName));
     const querySnapshot = await getDocs(q);
     querySnapshot.forEach(async (d) => {
         await deleteDoc(doc(db, 'config_houses', d.id));
     });
     logAction('Configuração: Casas', `Removeu a casa: ${houseName}`);
+  };
+
+  // DnD Handlers for Houses (Visual Only for now as DB does not support order yet)
+  const handleHouseDragStart = (e: React.DragEvent, index: number) => {
+      setDraggedHouseIndex(index);
+      e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleHouseDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+  };
+
+  const handleHouseDrop = (e: React.DragEvent, targetIndex: number) => {
+      e.preventDefault();
+      if (draggedHouseIndex === null || draggedHouseIndex === targetIndex) return;
+      
+      const newHouses = [...houses];
+      const [draggedItem] = newHouses.splice(draggedHouseIndex, 1);
+      newHouses.splice(targetIndex, 0, draggedItem);
+      
+      setHouses(newHouses); // Optimistic UI update
+      setDraggedHouseIndex(null);
   };
 
   // --- Task Types ---
@@ -139,10 +165,21 @@ export const Settings: React.FC<SettingsProps> = ({
                                  <td className="py-3 text-slate-300">@{u.username}</td>
                                  <td className="py-3 text-slate-400">{u.email}</td>
                                  <td className="py-3">
-                                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold ${u.role === 'ADMIN' ? 'bg-purple-500/20 text-purple-400' : 'bg-slate-700 text-slate-300'}`}>
-                                         {u.role === 'ADMIN' ? <ShieldCheck size={12}/> : <Shield size={12}/>}
-                                         {u.role}
-                                     </span>
+                                     {currentUser?.role === 'ADMIN' && currentUser.id !== u.id ? (
+                                        <select 
+                                            value={u.role}
+                                            onChange={(e) => onUpdateUserRole(u.id, e.target.value as 'ADMIN' | 'USER')}
+                                            className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-white"
+                                        >
+                                            <option value="USER">USER</option>
+                                            <option value="ADMIN">ADMIN</option>
+                                        </select>
+                                     ) : (
+                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold ${u.role === 'ADMIN' ? 'bg-purple-500/20 text-purple-400' : 'bg-slate-700 text-slate-300'}`}>
+                                            {u.role === 'ADMIN' ? <ShieldCheck size={12}/> : <Shield size={12}/>}
+                                            {u.role}
+                                        </span>
+                                     )}
                                  </td>
                              </tr>
                          ))}
@@ -155,7 +192,7 @@ export const Settings: React.FC<SettingsProps> = ({
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
             <span className="w-1.5 h-6 bg-emerald-500 rounded-full"></span>
-            Casas de Aposta
+            Casas de Aposta <span className="text-xs font-normal text-slate-500 ml-2">(Arraste para reordenar visualmente)</span>
           </h3>
           
           <form onSubmit={handleAddHouse} className="flex gap-2 mb-6">
@@ -173,8 +210,18 @@ export const Settings: React.FC<SettingsProps> = ({
 
           <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
             {houses.map((house, idx) => (
-              <div key={idx} className="flex items-center justify-between bg-slate-950/50 border border-slate-800 p-3 rounded-lg group">
-                <span className="text-slate-300">{house}</span>
+              <div 
+                key={house} 
+                draggable
+                onDragStart={(e) => handleHouseDragStart(e, idx)}
+                onDragOver={handleHouseDragOver}
+                onDrop={(e) => handleHouseDrop(e, idx)}
+                className={`flex items-center justify-between bg-slate-950/50 border border-slate-800 p-3 rounded-lg group cursor-move ${draggedHouseIndex === idx ? 'opacity-50 ring-2 ring-indigo-500' : ''}`}
+              >
+                <div className="flex items-center gap-2">
+                    <GripVertical size={16} className="text-slate-600" />
+                    <span className="text-slate-300">{house}</span>
+                </div>
                 <button 
                   onClick={() => handleRemoveHouse(house)}
                   className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"

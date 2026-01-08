@@ -3,7 +3,7 @@ import { User } from '../types';
 import { Lock, User as UserIcon, ArrowRight, Mail, AlertCircle, CheckCircle2, AtSign } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -13,7 +13,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
+  
+  // Used for both Email or Username in login mode
+  const [loginInput, setLoginInput] = useState(''); 
+  
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -27,24 +30,30 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     try {
       if (isRegistering) {
-        // --- REGISTRO FIREBASE ---
-        if (!name || !email || !password || !username) {
+        // --- REGISTRO (Mantém lógica original) ---
+        // Nota: loginInput aqui atua como o email no registro
+        if (!name || !loginInput || !password || !username) {
           throw new Error('Preencha todos os campos.');
         }
 
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        // Verifica se username já existe
+        const q = query(collection(db, 'users'), where('username', '==', username.toLowerCase()));
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+           throw new Error('Este nome de usuário já está em uso.');
+        }
+
+        const userCredential = await createUserWithEmailAndPassword(auth, loginInput, password);
         const firebaseUser = userCredential.user;
 
-        // Atualizar perfil básico
         await updateProfile(firebaseUser, { displayName: name });
 
-        // Salvar dados extras no Firestore (Users collection)
         const newUser: User = {
           id: firebaseUser.uid,
           name,
-          username,
-          email,
-          role: 'USER' // Padrão USER, mude manualmente no banco se precisar de ADMIN
+          username: username.toLowerCase(),
+          email: loginInput,
+          role: 'USER'
         };
 
         await setDoc(doc(db, "users", firebaseUser.uid), newUser);
@@ -54,24 +63,38 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         setName('');
         setUsername('');
         setPassword('');
+        setLoginInput(''); // Clear email
       } else {
-        // --- LOGIN FIREBASE ---
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        // --- LOGIN (Email OU Usuário) ---
+        let emailToLogin = loginInput;
+
+        // Se não tem @, assumimos que é um username e buscamos o email
+        if (!loginInput.includes('@')) {
+            const q = query(collection(db, 'users'), where('username', '==', loginInput.toLowerCase()));
+            const snapshot = await getDocs(q);
+            
+            if (snapshot.empty) {
+                throw new Error('Usuário não encontrado.');
+            }
+            
+            // Pega o email do primeiro usuário encontrado
+            emailToLogin = snapshot.docs[0].data().email;
+        }
+
+        const userCredential = await signInWithEmailAndPassword(auth, emailToLogin, password);
         const firebaseUser = userCredential.user;
 
-        // Buscar dados completos do usuário no Firestore
         const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
         
         if (userDoc.exists()) {
           const userData = userDoc.data() as User;
           onLogin(userData);
         } else {
-          // Fallback se o usuário existir no Auth mas não no Firestore (raro)
           const fallbackUser: User = {
              id: firebaseUser.uid,
              name: firebaseUser.displayName || 'Usuário',
-             username: email.split('@')[0],
-             email: email,
+             username: emailToLogin.split('@')[0],
+             email: emailToLogin,
              role: 'USER'
           };
           onLogin(fallbackUser);
@@ -81,7 +104,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       console.error(err);
       let msg = 'Erro ao realizar operação.';
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
-        msg = 'Email ou senha incorretos.';
+        msg = 'Credenciais incorretas.';
       } else if (err.code === 'auth/email-already-in-use') {
         msg = 'Este email já está em uso.';
       } else if (err.code === 'auth/weak-password') {
@@ -99,7 +122,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setIsRegistering(!isRegistering);
     setError('');
     setSuccess('');
-    setEmail('');
+    setLoginInput('');
     setPassword('');
     setName('');
     setUsername('');
@@ -108,7 +131,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
       <div className="bg-slate-900 border border-slate-800 w-full max-w-md p-8 rounded-2xl shadow-2xl relative overflow-hidden">
-        {/* Background Decoration */}
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500"></div>
         
         <div className="text-center mb-8">
@@ -168,15 +190,17 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           )}
 
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Email</label>
+            <label className="block text-xs font-medium text-slate-400 mb-1">
+                {isRegistering ? 'Email' : 'Email ou Usuário'}
+            </label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
               <input 
-                type="email"
+                type={isRegistering ? "email" : "text"}
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="seu@email.com"
+                value={loginInput}
+                onChange={(e) => setLoginInput(e.target.value)}
+                placeholder={isRegistering ? "seu@email.com" : "email ou usuario"}
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
               />
             </div>
