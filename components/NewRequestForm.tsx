@@ -106,13 +106,14 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
   };
 
   const getAccountLabel = (acc: Account) => {
-      let label = `(${acc.house})`;
+      // Format: Casa - Dono - Titular
+      let label = `${acc.house}`;
       
       if (acc.owner) {
-          label += `, ${acc.owner} - ${acc.name}`;
-      } else {
-          label += ` - ${acc.name}`;
+          label += ` - ${acc.owner}`;
       }
+      
+      label += ` - ${acc.name}`;
       
       if (acc.status === 'LIMITED') label = `[LIMITADA] ${label}`;
       else if (acc.status === 'REPLACEMENT') label = `[REPOSIÇÃO] ${label}`;
