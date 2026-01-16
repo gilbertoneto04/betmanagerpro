@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Account, Pack, PixKey, User, LogEntry } from '../types';
-import { Ban, DollarSign, User as UserIcon, Mail, AlertTriangle, Search, Plus, Pencil, Save, X, CreditCard, RefreshCw, Package, Tag, Landmark, RotateCcw, Trash2, Info, Calendar, Key, AtSign } from 'lucide-react';
+import { Ban, DollarSign, User as UserIcon, Mail, AlertTriangle, Search, Plus, Pencil, Save, X, CreditCard, RefreshCw, Package, Tag, Landmark, RotateCcw, Trash2, Info, Calendar, Key, AtSign, Copy } from 'lucide-react';
 
 interface AccountListProps {
   accounts: Account[];
@@ -111,6 +111,37 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
         }
     }
   }, [selectedAccountForLimit, selectedAccountForReplacement, selectedAccountForWithdrawal, currentUser]);
+
+  // Keyboard Shortcuts Listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName);
+
+      if (e.key === 'Escape') {
+        resetModals();
+        setEditingAccount(null);
+        setHistoryAccount(null);
+        setViewingAccount(null);
+        return;
+      }
+
+      // Confirm actions with Enter (only if not typing in an input)
+      if (e.key === 'Enter' && !isInput) {
+         if (selectedAccountForLimit) confirmLimit(true);
+         else if (selectedAccountForReplacement) confirmReplacement(true);
+         else if (selectedAccountForWithdrawal) confirmWithdrawal();
+         else if (selectedAccountForDeletion) confirmDeletion();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    selectedAccountForLimit, 
+    selectedAccountForReplacement, 
+    selectedAccountForWithdrawal, 
+    selectedAccountForDeletion
+  ]);
 
   const getTitle = () => {
       if (type === 'ACTIVE') return 'Contas em Uso';
@@ -261,6 +292,12 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
     }
   };
 
+  const handleCopy = (e: React.MouseEvent, text: string) => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(text);
+      // Optional: show toast
+  };
+
   // UPDATED: Show 'updatedAt' if available as the primary timestamp
   const getDateLabel = (acc: Account) => {
       if (acc.updatedAt) return `Atualizado: ${new Date(acc.updatedAt).toLocaleDateString()} ${new Date(acc.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
@@ -336,10 +373,11 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
             onClick={() => setViewingAccount(account)}
             className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm hover:border-indigo-500/30 transition-all group relative cursor-pointer"
           >
-             <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+             {/* Action Buttons - Always visible now for better UX, Z-Index boosted */}
+             <div className="absolute top-4 right-4 flex gap-2 z-20">
                 <button 
                     onClick={(e) => handleHistoryClick(e, account)} 
-                    className="p-1.5 bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-700"
+                    className="p-1.5 bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors"
                     title="Ver Histórico"
                 >
                     <Info size={14} />
@@ -348,7 +386,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                 {type !== 'DELETED' && onDelete && (
                     <button 
                         onClick={(e) => handleDeleteClick(e, account)} 
-                        className="p-1.5 bg-slate-800 text-slate-400 hover:text-red-400 rounded-lg border border-slate-700"
+                        className="p-1.5 bg-slate-800 text-slate-400 hover:text-red-400 rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors"
                         title="Excluir Conta"
                     >
                         <Trash2 size={14} />
@@ -361,7 +399,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                         {onReactivate && (
                             <button 
                                 onClick={(e) => handleReactivateClick(e, account)}
-                                className="p-1.5 bg-slate-800 text-blue-500 hover:text-blue-400 rounded-lg border border-slate-700"
+                                className="p-1.5 bg-slate-800 text-blue-500 hover:text-blue-400 rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors"
                                 title="Restaurar Conta"
                             >
                                 <RotateCcw size={14} />
@@ -373,7 +411,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                                     e.stopPropagation();
                                     onDelete(account.id, ""); // Permanent delete trigger
                                 }} 
-                                className="p-1.5 bg-slate-800 text-red-500 hover:text-red-400 rounded-lg border border-slate-700"
+                                className="p-1.5 bg-slate-800 text-red-500 hover:text-red-400 rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors"
                                 title="Excluir Permanentemente"
                             >
                                 <X size={14} />
@@ -383,7 +421,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                 )}
 
                 {onSave && type !== 'DELETED' && (
-                   <button onClick={(e) => handleEditClick(e, account)} className="p-1.5 bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-700" title="Editar">
+                   <button onClick={(e) => handleEditClick(e, account)} className="p-1.5 bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors" title="Editar">
                      <Pencil size={14} />
                    </button>
                 )}
@@ -394,7 +432,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                         {onWithdraw && (
                             <button 
                                 onClick={(e) => handleWithdrawalClick(e, account)} 
-                                className="p-1.5 bg-slate-800 text-emerald-500 hover:text-emerald-400 rounded-lg border border-slate-700"
+                                className="p-1.5 bg-slate-800 text-emerald-500 hover:text-emerald-400 rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors"
                                 title="Solicitar Saque"
                             >
                                 <DollarSign size={14} />
@@ -403,7 +441,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                         {onReactivate && (
                             <button 
                                 onClick={(e) => handleReactivateClick(e, account)} 
-                                className="p-1.5 bg-slate-800 text-blue-500 hover:text-blue-400 rounded-lg border border-slate-700"
+                                className="p-1.5 bg-slate-800 text-blue-500 hover:text-blue-400 rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors"
                                 title="Reativar Conta (Mover para Ativas)"
                             >
                                 <RotateCcw size={14} />
@@ -417,7 +455,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                         {onWithdraw && (
                             <button 
                                 onClick={(e) => handleWithdrawalClick(e, account)} 
-                                className="p-1.5 bg-slate-800 text-emerald-500 hover:text-emerald-400 rounded-lg border border-slate-700"
+                                className="p-1.5 bg-slate-800 text-emerald-500 hover:text-emerald-400 rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors"
                                 title="Solicitar Saque"
                             >
                                 <DollarSign size={14} />
@@ -426,7 +464,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                         {onReactivate && (
                             <button 
                                 onClick={(e) => handleReactivateClick(e, account)} 
-                                className="p-1.5 bg-slate-800 text-blue-500 hover:text-blue-400 rounded-lg border border-slate-700"
+                                className="p-1.5 bg-slate-800 text-blue-500 hover:text-blue-400 rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors"
                                 title="Reativar Conta (Mover para Ativas)"
                             >
                                 <RotateCcw size={14} />
@@ -438,7 +476,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                 {onReplacement && account.status !== 'REPLACEMENT' && type !== 'DELETED' && (
                   <button 
                     onClick={(e) => handleReplacementClick(e, account)}
-                    className="p-1.5 bg-slate-800 text-rose-500 hover:text-rose-400 rounded-lg border border-slate-700"
+                    className="p-1.5 bg-slate-800 text-rose-500 hover:text-rose-400 rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors"
                     title="Marcar para Reposição"
                   >
                     <RefreshCw size={14} />
@@ -447,7 +485,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                 {type === 'ACTIVE' && (
                   <button 
                     onClick={(e) => handleLimitClick(e, account)}
-                    className="p-1.5 bg-slate-800 text-amber-500 hover:text-amber-400 rounded-lg border border-slate-700"
+                    className="p-1.5 bg-slate-800 text-amber-500 hover:text-amber-400 rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors"
                     title="Marcar como Limitada"
                   >
                     <Ban size={14} />
@@ -457,7 +495,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
 
             <div className="flex justify-between items-start mb-4">
                <div className="flex items-center gap-3">
-                 <span className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 border border-slate-700">
+                 <span className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 border border-slate-700 shrink-0">
                     <UserIcon size={18} />
                  </span>
                  <div className="max-w-[150px]">
@@ -470,7 +508,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
             </div>
 
             {/* Tags & Owner */}
-            <div className="mb-3 flex flex-wrap gap-2">
+            <div className="mb-3 flex flex-wrap gap-2 min-h-[24px]">
                 {account.owner && (
                     <span className="text-[10px] flex items-center gap-1 bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-1 rounded-md font-medium">
                         <UserIcon size={10} />
@@ -485,26 +523,34 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                 ))}
             </div>
 
-            <div className="space-y-3 text-sm text-slate-400 bg-slate-950/50 rounded-lg p-3 border border-slate-800/50">
-              <div className="flex items-center gap-2">
-                <Mail size={14} className="text-indigo-400" />
-                <span className="truncate">{account.email}</span>
+            <div className="grid grid-cols-2 gap-2 text-sm text-slate-400 bg-slate-950/50 rounded-lg p-3 border border-slate-800/50">
+              <div className="col-span-2 flex items-center justify-between group/field">
+                 <div className="flex items-center gap-2 overflow-hidden">
+                    <Mail size={14} className="text-indigo-400 shrink-0" />
+                    <span className="truncate">{account.email}</span>
+                 </div>
+                 <button onClick={(e) => handleCopy(e, account.email)} className="opacity-0 group-hover/field:opacity-100 text-slate-500 hover:text-white p-1"><Copy size={12} /></button>
               </div>
-              <div className="flex items-center gap-2">
-                <DollarSign size={14} className="text-emerald-400" />
-                <span>Depósito: <span className="text-slate-200 font-mono">R$ {account.depositValue.toFixed(2)}</span></span>
-              </div>
+              
               {account.username && (
-                 <div className="flex items-center gap-2">
-                   <UserIcon size={14} className="text-slate-500" />
-                   <span className="text-xs text-slate-300">User: <span className="text-white">{account.username}</span></span>
+                 <div className="col-span-2 flex items-center justify-between group/field">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                        <UserIcon size={14} className="text-blue-400 shrink-0" />
+                        <span className="truncate text-slate-300">{account.username}</span>
+                    </div>
+                    <button onClick={(e) => handleCopy(e, account.username!)} className="opacity-0 group-hover/field:opacity-100 text-slate-500 hover:text-white p-1"><Copy size={12} /></button>
                  </div>
               )}
+
+              <div className="flex items-center gap-2 mt-1">
+                <DollarSign size={14} className="text-emerald-400 shrink-0" />
+                <span className="text-slate-200 font-mono">R$ {account.depositValue.toFixed(2)}</span>
+              </div>
+              
               {account.password && (
-                 <div className="flex items-center gap-2">
-                   <Key size={14} className="text-slate-500" />
-                   <span className="text-xs text-slate-500">Senha:</span>
-                   <span className="font-mono text-xs">•••••••</span>
+                 <div className="flex items-center gap-2 mt-1 justify-end">
+                   <Key size={14} className="text-amber-400 shrink-0" />
+                   <span className="font-mono text-xs">••••••</span>
                  </div>
               )}
             </div>
@@ -523,7 +569,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                   <CreditCard size={12} />
                   <span className="uppercase tracking-wider">Card / Info</span>
                 </div>
-                <p className="text-xs text-slate-400 line-clamp-2 italic">
+                <p className="text-xs text-slate-400 line-clamp-2 italic break-all">
                   {account.card}
                 </p>
               </div>
@@ -562,11 +608,29 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                 <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
                     <p className="text-xs text-slate-500 uppercase font-bold mb-2">Credenciais</p>
                     <div className="space-y-2 text-sm text-slate-300">
-                        <div className="flex justify-between"><span>Email:</span> <span className="text-white select-all">{viewingAccount.email}</span></div>
+                        <div className="flex justify-between items-center group/item">
+                            <span>Email:</span> 
+                            <div className="flex items-center gap-2">
+                                <span className="text-white select-all">{viewingAccount.email}</span>
+                                <button onClick={() => navigator.clipboard.writeText(viewingAccount.email)} className="opacity-0 group-hover/item:opacity-100 text-slate-500 hover:text-white"><Copy size={12}/></button>
+                            </div>
+                        </div>
                         {viewingAccount.username && (
-                            <div className="flex justify-between"><span>Usuário:</span> <span className="text-white select-all">{viewingAccount.username}</span></div>
+                            <div className="flex justify-between items-center group/item">
+                                <span>Usuário:</span> 
+                                <div className="flex items-center gap-2">
+                                    <span className="text-white select-all">{viewingAccount.username}</span>
+                                    <button onClick={() => navigator.clipboard.writeText(viewingAccount.username!)} className="opacity-0 group-hover/item:opacity-100 text-slate-500 hover:text-white"><Copy size={12}/></button>
+                                </div>
+                            </div>
                         )}
-                        <div className="flex justify-between"><span>Senha:</span> <span className="text-white font-mono select-all">{viewingAccount.password || 'N/A'}</span></div>
+                        <div className="flex justify-between items-center group/item">
+                            <span>Senha:</span> 
+                            <div className="flex items-center gap-2">
+                                <span className="text-white font-mono select-all">{viewingAccount.password || 'N/A'}</span>
+                                {viewingAccount.password && <button onClick={() => navigator.clipboard.writeText(viewingAccount.password!)} className="opacity-0 group-hover/item:opacity-100 text-slate-500 hover:text-white"><Copy size={12}/></button>}
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -803,6 +867,177 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
              </form>
           </div>
         </div>
+      )}
+
+      {/* Limit Confirmation Modal */}
+      {selectedAccountForLimit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="flex items-center gap-3 text-amber-500 mb-4">
+              <AlertTriangle size={24} />
+              <h3 className="text-xl font-bold text-white">Limitar Conta</h3>
+            </div>
+            
+            <p className="text-slate-300 mb-4">
+              Você está marcando a conta <strong>{selectedAccountForLimit.name}</strong> como limitada. 
+              Deseja registrar automaticamente uma pendência de saque?
+            </p>
+            
+            <PixSelectionSection 
+                mode={pixSelectionMode} setMode={setPixSelectionMode}
+                selectedId={selectedPixId} setSelectedId={setSelectedPixId}
+                newString={newPixString} setNewString={setNewPixString}
+                pixKeys={pixKeys}
+            />
+
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => confirmLimit(true)}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-colors"
+              >
+                Sim, registrar saque e limitar (Enter)
+              </button>
+              <button
+                onClick={() => confirmLimit(false)}
+                className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-medium transition-colors"
+              >
+                Não, apenas limitar
+              </button>
+              <button
+                onClick={resetModals}
+                className="w-full py-2 text-slate-500 hover:text-slate-400 text-sm"
+              >
+                Cancelar (Esc)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Replacement Confirmation Modal */}
+      {selectedAccountForReplacement && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-500 mb-4">
+              <RefreshCw size={24} />
+              <h3 className="text-xl font-bold text-white">Conta em Reposição</h3>
+            </div>
+            
+            <p className="text-slate-300 mb-4">
+              Você está marcando a conta <strong>{selectedAccountForReplacement.name}</strong> como defeituosa/reposição. 
+              Deseja registrar automaticamente uma pendência de saque?
+            </p>
+
+            <PixSelectionSection 
+                mode={pixSelectionMode} setMode={setPixSelectionMode}
+                selectedId={selectedPixId} setSelectedId={setSelectedPixId}
+                newString={newPixString} setNewString={setNewPixString}
+                pixKeys={pixKeys}
+            />
+
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => confirmReplacement(true)}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-colors"
+              >
+                Sim, registrar saque e marcar (Enter)
+              </button>
+              <button
+                onClick={() => confirmReplacement(false)}
+                className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-medium transition-colors"
+              >
+                Não, apenas marcar
+              </button>
+              <button
+                onClick={resetModals}
+                className="w-full py-2 text-slate-500 hover:text-slate-400 text-sm"
+              >
+                Cancelar (Esc)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Withdrawal Confirmation Modal (From Limited Tab) */}
+      {selectedAccountForWithdrawal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="flex items-center gap-3 text-emerald-500 mb-4">
+              <DollarSign size={24} />
+              <h3 className="text-xl font-bold text-white">Solicitar Saque</h3>
+            </div>
+            
+            <p className="text-slate-300 mb-4">
+              Registrar pendência de saque para a conta <strong>{selectedAccountForWithdrawal.name}</strong>?
+            </p>
+
+            <PixSelectionSection 
+                mode={pixSelectionMode} setMode={setPixSelectionMode}
+                selectedId={selectedPixId} setSelectedId={setSelectedPixId}
+                newString={newPixString} setNewString={setNewPixString}
+                pixKeys={pixKeys}
+            />
+
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={confirmWithdrawal}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition-colors"
+              >
+                Confirmar Solicitação (Enter)
+              </button>
+              <button
+                onClick={resetModals}
+                className="w-full py-2 text-slate-500 hover:text-slate-400 text-sm"
+              >
+                Cancelar (Esc)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Deletion Modal */}
+      {selectedAccountForDeletion && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+                <div className="flex items-center gap-3 text-red-500 mb-4">
+                    <Trash2 size={24} />
+                    <h3 className="text-xl font-bold text-white">Excluir Conta</h3>
+                </div>
+                
+                <p className="text-slate-300 mb-4">
+                    Tem certeza que deseja excluir a conta <strong>{selectedAccountForDeletion.name}</strong>? 
+                    Ela será movida para a aba de "Contas Excluídas".
+                </p>
+
+                <div className="mb-6">
+                    <label className="text-xs font-medium text-slate-400 mb-2 block">Justificativa (Opcional)</label>
+                    <textarea
+                        rows={3}
+                        value={deletionReason}
+                        onChange={(e) => setDeletionReason(e.target.value)}
+                        placeholder="Ex: Conta banida, duplicada..."
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:ring-2 focus:ring-red-500/50 outline-none resize-none"
+                    />
+                </div>
+
+                <div className="flex flex-col gap-3">
+                    <button
+                        onClick={confirmDeletion}
+                        className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors"
+                    >
+                        Confirmar Exclusão (Enter)
+                    </button>
+                    <button
+                        onClick={resetModals}
+                        className="w-full py-2 text-slate-500 hover:text-slate-400 text-sm"
+                    >
+                        Cancelar (Esc)
+                    </button>
+                </div>
+            </div>
+          </div>
       )}
     </div>
   );
