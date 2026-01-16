@@ -35,7 +35,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
       {/* Mobile Header */}
       <div className="lg:hidden flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md sticky top-0 z-50">
         <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-          BetManager
+          Gestão KFB
         </h1>
         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-slate-300 active:bg-slate-800 rounded-lg">
           {isMobileMenuOpen ? <X /> : <Menu />}
@@ -59,7 +59,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
         >
           <div className="p-6">
             <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-8 hidden lg:block">
-              BetManager
+              Gestão KFB
             </h1>
             
             <nav className="space-y-2 overflow-y-auto max-h-[calc(100vh-180px)] lg:max-h-[calc(100vh-200px)]">

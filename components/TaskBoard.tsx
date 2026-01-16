@@ -87,8 +87,6 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
             setUsePack(true); // Default to true
         } else {
             setSelectedPackId('');
-            // If no packs, force usePack to false unless we want to enforce pack existence? 
-            // For now, logic implies: if pack exists, select it. 
             setUsePack(false);
         }
     }
@@ -219,9 +217,6 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
           if (editAccountId) {
               const acc = accounts.find(a => a.id === editAccountId);
               if (acc) updatedAccountName = acc.name;
-          } else if (editType !== TaskType.CONTA_NOVA) {
-              // If not new account, user might have cleared selection -> handle gracefully?
-              // keeping old name if not found is risky if house changed
           }
 
           onEditTask(taskToEdit.id, {
@@ -272,7 +267,6 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
 
   const submitFinishAccount = () => {
     if (finishingTask) {
-      // Rule: Agency Users must use a Pack (Enforced by UI disabling, but good to check here too)
       if (currentUser?.role !== 'ADMIN' && (!usePack || !selectedPackId)) {
          alert("Membros da agência devem utilizar um Pack ativo para entregar contas.");
          return;
@@ -304,15 +298,6 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
     }
   };
   
-  const getFilteredLogs = (task: Task) => {
-      if (!logs) return [];
-      const searchName = task.accountName || '';
-      return logs.filter(l => 
-          (l.taskId === task.id) || 
-          (searchName && l.taskDescription && l.taskDescription.includes(searchName))
-      ).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  };
-
   const FilterButton = ({ label, value, count }: { label: string, value: 'ALL' | 'UNFINISHED' | TaskStatus, count: number }) => (
     <button
       onClick={() => setFilter(value)}
@@ -343,7 +328,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                     {task.deletionReason && <span className="block mt-1 italic text-slate-500">"{task.deletionReason}"</span>}
                 </div>
                 <button
-                    onClick={() => handleAction(task, 'PENDENTE')}
+                    onClick={(e) => { e.stopPropagation(); handleAction(task, 'PENDENTE'); }}
                     className="flex items-center justify-center gap-2 w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition-colors border border-slate-700"
                 >
                     <RotateCcw size={14} />
@@ -354,7 +339,6 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
     }
 
     if (task.status === TaskStatus.FINALIZADA) {
-        // Find agent name if KFB/Admin wants to see it?
         const finishedAgent = users?.find(u => u.id === task.finishedBy);
         
         return (
@@ -365,7 +349,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                     </div>
                 )}
                 <button
-                    onClick={() => handleAction(task, 'SOLICITADA')}
+                    onClick={(e) => { e.stopPropagation(); handleAction(task, 'SOLICITADA'); }}
                     className="flex items-center justify-center gap-2 w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs font-medium transition-colors"
                 >
                     Reabrir (Marcar Solicitada)
@@ -378,14 +362,14 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
         return (
             <div className="col-span-2 grid grid-cols-2 gap-2">
                  <button
-                    onClick={() => initDelivery(task, 'PARTIAL')}
+                    onClick={(e) => { e.stopPropagation(); initDelivery(task, 'PARTIAL'); }}
                     className="flex items-center justify-center gap-2 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-sm font-medium transition-colors"
                  >
                     <Layers size={16} />
                     Entregar Parcial
                  </button>
                  <button
-                    onClick={() => initDelivery(task, 'FULL')}
+                    onClick={(e) => { e.stopPropagation(); initDelivery(task, 'FULL'); }}
                     className="flex items-center justify-center gap-2 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-sm font-medium transition-colors"
                  >
                     <CheckCircle2 size={16} />
@@ -399,14 +383,14 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
         return (
             <>
                 <button
-                    onClick={() => handleAction(task, 'SOLICITADA')}
+                    onClick={(e) => { e.stopPropagation(); handleAction(task, 'SOLICITADA'); }}
                     className="flex items-center justify-center gap-2 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg text-sm font-medium transition-colors"
                 >
                     <PlayCircle size={16} />
                     Solicitada
                 </button>
                 <button
-                    onClick={() => handleAction(task, 'FINALIZADA')}
+                    onClick={(e) => { e.stopPropagation(); handleAction(task, 'FINALIZADA'); }}
                     className="flex items-center justify-center gap-2 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-sm font-medium transition-colors"
                 >
                     <CheckCircle2 size={16} />
@@ -420,14 +404,14 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
         return (
              <>
                 <button
-                onClick={() => handleAction(task, 'PENDENTE')}
+                onClick={(e) => { e.stopPropagation(); handleAction(task, 'PENDENTE'); }}
                 className="flex items-center justify-center gap-2 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-sm font-medium transition-colors"
                 >
                 <Clock size={16} />
                 Voltar
                 </button>
                 <button
-                onClick={() => handleAction(task, 'FINALIZADA')}
+                onClick={(e) => { e.stopPropagation(); handleAction(task, 'FINALIZADA'); }}
                 className="flex items-center justify-center gap-2 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-sm font-medium transition-colors"
                 >
                 <CheckCircle2 size={16} />
@@ -533,7 +517,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                   {/* History Button */}
                   {logs && (
                     <button
-                        onClick={() => setHistoryTask(task)}
+                        onClick={(e) => { e.stopPropagation(); setHistoryTask(task); }}
                         className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
                         title="Ver Histórico"
                     >
@@ -544,7 +528,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                   {/* Edit Button - Only if not excluded */}
                   {task.status !== TaskStatus.EXCLUIDA && (
                     <button
-                        onClick={() => initGeneralEdit(task)}
+                        onClick={(e) => { e.stopPropagation(); initGeneralEdit(task); }}
                         className="p-1.5 text-slate-500 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition-colors"
                         title="Editar Pendência"
                     >
@@ -555,7 +539,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                   {/* Delete Button */}
                   {task.status !== TaskStatus.EXCLUIDA && (
                       <button 
-                        onClick={() => initDeletion(task)}
+                        onClick={(e) => { e.stopPropagation(); initDeletion(task); }}
                         className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
                         title="Excluir Solicitação"
                       >
@@ -564,7 +548,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                   )}
               </div>
               
-              <div className="absolute top-1/2 left-1 -translate-y-1/2 text-slate-700 opacity-0 group-hover:opacity-50">
+              <div className="absolute top-1/2 left-1 -translate-y-1/2 text-slate-700 opacity-0 group-hover:opacity-50 pointer-events-none">
                  <GripVertical size={16} />
               </div>
 
@@ -621,7 +605,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                              <span className="whitespace-pre-wrap break-all">{task.pixKeyInfo}</span>
                           </div>
                           {task.status !== TaskStatus.FINALIZADA && task.status !== TaskStatus.EXCLUIDA && (
-                              <button onClick={() => setEditingPixTask(task)} className="p-1 hover:bg-purple-500/20 rounded transition-colors shrink-0" title="Editar Pix">
+                              <button onClick={(e) => { e.stopPropagation(); setEditingPixTask(task); }} className="p-1 hover:bg-purple-500/20 rounded transition-colors shrink-0" title="Editar Pix">
                                   <Pencil size={12} />
                               </button>
                           )}
@@ -810,9 +794,6 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
         </div>
       )}
 
-      {/* Other modals remain unchanged but omitted for brevity in this delta, 
-          they are part of the full file content above */}
-          
       {/* Deletion Confirmation Modal */}
       {deletingTask && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">

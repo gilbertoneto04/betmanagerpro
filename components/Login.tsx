@@ -30,13 +30,11 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     try {
       if (isRegistering) {
-        // --- REGISTRO (Mantém lógica original) ---
-        // Nota: loginInput aqui atua como o email no registro
+        // --- REGISTRO ---
         if (!name || !loginInput || !password || !username) {
           throw new Error('Preencha todos os campos.');
         }
 
-        // Verifica se username já existe
         const q = query(collection(db, 'users'), where('username', '==', username.toLowerCase()));
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
@@ -53,7 +51,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           name,
           username: username.toLowerCase(),
           email: loginInput,
-          role: 'USER'
+          role: 'AGENCIA' // Default role is now AGENCIA
         };
 
         await setDoc(doc(db, "users", firebaseUser.uid), newUser);
@@ -63,12 +61,11 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         setName('');
         setUsername('');
         setPassword('');
-        setLoginInput(''); // Clear email
+        setLoginInput(''); 
       } else {
-        // --- LOGIN (Email OU Usuário) ---
+        // --- LOGIN ---
         let emailToLogin = loginInput;
 
-        // Se não tem @, assumimos que é um username e buscamos o email
         if (!loginInput.includes('@')) {
             const q = query(collection(db, 'users'), where('username', '==', loginInput.toLowerCase()));
             const snapshot = await getDocs(q);
@@ -77,7 +74,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 throw new Error('Usuário não encontrado.');
             }
             
-            // Pega o email do primeiro usuário encontrado
             emailToLogin = snapshot.docs[0].data().email;
         }
 
@@ -90,12 +86,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           const userData = userDoc.data() as User;
           onLogin(userData);
         } else {
+          // Fallback if user doc doesn't exist but auth does
           const fallbackUser: User = {
              id: firebaseUser.uid,
              name: firebaseUser.displayName || 'Usuário',
              username: emailToLogin.split('@')[0],
              email: emailToLogin,
-             role: 'USER'
+             role: 'AGENCIA'
           };
           onLogin(fallbackUser);
         }
@@ -135,7 +132,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-2">
-            BetManager Pro
+            Gestão KFB
           </h1>
           <p className="text-slate-400">
             {isRegistering ? 'Crie sua conta de acesso' : 'Faça login para continuar'}
