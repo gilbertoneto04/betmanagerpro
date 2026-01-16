@@ -1,3 +1,4 @@
+
 export enum TaskType {
   SMS = 'SMS',
   FACIAL_SEMANAL = 'FACIAL_SEMANAL',
@@ -65,8 +66,9 @@ export interface Pack {
 export interface Account {
   id: string;
   name: string;
+  username?: string; // Login na casa de aposta
   email: string;
-  password?: string;
+  password?: string; // Senha na casa de aposta
   card?: string;
   house: string;
   depositValue: number;

@@ -76,9 +76,21 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
               <div className="pt-4 pb-2">
                 <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Sistema</p>
               </div>
-              <NavItem tab="INSIGHTS" icon={BarChart3} label="Insights" />
-              <NavItem tab="HISTORY" icon={History} label="Histórico" />
-              <NavItem tab="SETTINGS" icon={Settings} label="Configurações" />
+              
+              {/* Permission Check: Insights only for ADMIN */}
+              {user?.role === 'ADMIN' && (
+                <NavItem tab="INSIGHTS" icon={BarChart3} label="Insights" />
+              )}
+              
+              {/* Permission Check: History NOT for USER and AGENCIA */}
+              {user?.role !== 'USER' && user?.role !== 'AGENCIA' && (
+                <NavItem tab="HISTORY" icon={History} label="Histórico" />
+              )}
+              
+              {/* Permission Check: Settings for everyone EXCEPT AGENCIA */}
+              {user?.role !== 'AGENCIA' && (
+                <NavItem tab="SETTINGS" icon={Settings} label="Configurações" />
+              )}
             </nav>
           </div>
           

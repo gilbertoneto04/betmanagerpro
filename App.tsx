@@ -468,18 +468,20 @@ const App: React.FC = () => {
           const acc = accounts.find(a => a.id === accountId);
           if(!acc) return;
           
+          const context = acc.status === 'LIMITED' ? 'Conta Limitada' : (acc.status === 'REPLACEMENT' ? 'Conta Reposição' : 'Conta');
+
           await handleCreateTask({
                type: TaskType.SAQUE,
                house: acc.house,
                accountName: acc.name,
-               description: `Solicitação de saque manual (Conta Limitada).`,
+               description: `Solicitação de saque manual (${context}).`,
                pixKeyInfo: pixInfo,
                status: TaskStatus.PENDENTE 
           });
           // Update timestamp on account to reflect activity
           await updateDoc(doc(db, 'accounts', accountId), { updatedAt: new Date().toISOString() });
           
-          addLog(accountId, `Conta ${acc.name}`, `Solicitou saque em conta limitada.`);
+          addLog(accountId, `Conta ${acc.name}`, `Solicitou saque em conta ${acc.status}.`);
       } catch (e: any) {
           alert(`Erro ao criar saque: ${e.message}`);
       }
@@ -580,7 +582,38 @@ const App: React.FC = () => {
           // Edit existing
           const { id, ...data } = accountData;
           const accRef = doc(db, 'accounts', id);
-          await updateDoc(accRef, sanitizePayload({ ...data, updatedAt: new Date().toISOString() }));
+          
+          // 1. Fetch old data to check for changes
+          const accSnap = await getDoc(accRef);
+          if (accSnap.exists()) {
+              const oldData = accSnap.data() as Account;
+              
+              // 2. Update Account
+              await updateDoc(accRef, sanitizePayload({ ...data, updatedAt: new Date().toISOString() }));
+              
+              // 3. CHECK FOR SYNC NEEDS (Cascade Update)
+              if (oldData.name !== data.name || oldData.house !== data.house) {
+                  // Find all tasks associated with the OLD data
+                  const q = query(
+                      collection(db, 'tasks'), 
+                      where('accountName', '==', oldData.name),
+                      where('house', '==', oldData.house)
+                  );
+                  const tasksSnap = await getDocs(q);
+                  
+                  if (!tasksSnap.empty) {
+                      const batch = writeBatch(db);
+                      tasksSnap.forEach(t => {
+                          batch.update(t.ref, { 
+                              accountName: data.name, 
+                              house: data.house 
+                          });
+                      });
+                      await batch.commit();
+                      addLog(id, `Sincronização - ${data.name}`, `Atualizou ${tasksSnap.size} pendências antigas para a nova casa/nome.`);
+                  }
+              }
+          }
           addLog(id, `Conta ${accountData.name}`, 'Dados da conta atualizados manualmente');
         } else {
           // Create new manual
@@ -760,7 +793,7 @@ const App: React.FC = () => {
              logs={logs} 
           />
       )}
-      {activeTab === 'HISTORY' && <HistoryLog logs={logs} />}
+      {activeTab === 'HISTORY' && currentUser?.role !== 'USER' && currentUser?.role !== 'AGENCIA' && <HistoryLog logs={logs} />}
       {activeTab === 'ACCOUNTS_ACTIVE' && (
           <AccountList 
             accounts={accounts.filter(a => a.status === 'ACTIVE')} 
@@ -802,6 +835,7 @@ const App: React.FC = () => {
             onSave={handleSaveAccount}
             onReactivate={handleReactivateAccount}
             onDelete={handleDeleteAccount}
+            onWithdraw={handleCreateWithdrawalForAccount}
             availableHouses={houses}
             logs={logs}
           />
@@ -819,7 +853,7 @@ const App: React.FC = () => {
             logs={logs}
           />
       )}
-      {activeTab === 'SETTINGS' && (
+      {activeTab === 'SETTINGS' && currentUser?.role !== 'AGENCIA' && (
           <Settings 
             houses={houses} 
             setHouses={setHousesHandler}
@@ -838,7 +872,7 @@ const App: React.FC = () => {
             onClearDatabase={handleClearOperationalData}
           />
       )}
-      {activeTab === 'INSIGHTS' && (
+      {activeTab === 'INSIGHTS' && currentUser?.role === 'ADMIN' && (
           <Insights 
             tasks={tasks} 
             accounts={accounts} 

@@ -267,16 +267,19 @@ export const PackList: React.FC<PackListProps> = ({ packs, accounts, availableHo
       {/* Account Details Modal (Reused) */}
       {viewingAccount && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
-             <button onClick={() => setViewingAccount(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X /></button>
-             
-             <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-2">
-                <UserIcon className="text-indigo-400" />
-                {viewingAccount.name}
-             </h3>
-             <p className="text-sm text-slate-400 mb-6">{viewingAccount.house} • {viewingAccount.status}</p>
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl relative flex flex-col max-h-[90vh]">
+             {/* Fixed Header */}
+             <div className="p-6 pb-2 shrink-0 border-b border-slate-800/50">
+                 <button onClick={() => setViewingAccount(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 bg-slate-800/50 rounded-full"><X size={20}/></button>
+                 <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-2 pr-8">
+                    <UserIcon className="text-indigo-400" />
+                    <span className="truncate">{viewingAccount.name}</span>
+                 </h3>
+                 <p className="text-sm text-slate-400">{viewingAccount.house} • {viewingAccount.status}</p>
+             </div>
 
-             <div className="space-y-4">
+             {/* Scrollable Content */}
+             <div className="p-6 pt-4 overflow-y-auto space-y-4">
                 <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
                     <p className="text-xs text-slate-500 uppercase font-bold mb-2">Credenciais</p>
                     <div className="space-y-2 text-sm text-slate-300">
@@ -295,7 +298,7 @@ export const PackList: React.FC<PackListProps> = ({ packs, accounts, availableHo
                 {viewingAccount.card && (
                     <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
                         <p className="text-xs text-slate-500 uppercase font-bold mb-2">Dados do Card</p>
-                        <p className="text-sm text-slate-300 font-mono whitespace-pre-wrap">{viewingAccount.card}</p>
+                        <p className="text-sm text-slate-300 font-mono whitespace-pre-wrap break-words">{viewingAccount.card}</p>
                     </div>
                 )}
                 

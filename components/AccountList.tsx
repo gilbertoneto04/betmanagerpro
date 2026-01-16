@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Account, Pack, PixKey, User, LogEntry } from '../types';
-import { Ban, DollarSign, User as UserIcon, Mail, AlertTriangle, Search, Plus, Pencil, Save, X, CreditCard, RefreshCw, Package, Tag, Landmark, RotateCcw, Trash2, Info, Calendar } from 'lucide-react';
+import { Ban, DollarSign, User as UserIcon, Mail, AlertTriangle, Search, Plus, Pencil, Save, X, CreditCard, RefreshCw, Package, Tag, Landmark, RotateCcw, Trash2, Info, Calendar, Key, AtSign } from 'lucide-react';
 
 interface AccountListProps {
   accounts: Account[];
@@ -131,6 +131,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
       .filter(acc => {
         const matchesSearch = acc.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                               acc.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              (acc.username && acc.username.toLowerCase().includes(searchTerm.toLowerCase())) ||
                               (acc.owner && acc.owner.toLowerCase().includes(searchTerm.toLowerCase())) ||
                               (acc.tags && acc.tags.some(t => t.toLowerCase().includes(searchTerm.toLowerCase())));
         const matchesHouse = houseFilter === 'ALL' || acc.house === houseFilter;
@@ -215,6 +216,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
   const handleNew = () => {
     setEditingAccount({
       name: '',
+      username: '',
       email: '',
       house: availableHouses[0] || '',
       depositValue: 0,
@@ -410,14 +412,27 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                     </>
                 )}
                 {/* Actions for REPLACEMENT tab */}
-                {type === 'REPLACEMENT' && onReactivate && (
-                    <button 
-                        onClick={(e) => handleReactivateClick(e, account)} 
-                        className="p-1.5 bg-slate-800 text-blue-500 hover:text-blue-400 rounded-lg border border-slate-700"
-                        title="Reativar Conta (Mover para Ativas)"
-                    >
-                        <RotateCcw size={14} />
-                    </button>
+                {type === 'REPLACEMENT' && (
+                    <>
+                        {onWithdraw && (
+                            <button 
+                                onClick={(e) => handleWithdrawalClick(e, account)} 
+                                className="p-1.5 bg-slate-800 text-emerald-500 hover:text-emerald-400 rounded-lg border border-slate-700"
+                                title="Solicitar Saque"
+                            >
+                                <DollarSign size={14} />
+                            </button>
+                        )}
+                        {onReactivate && (
+                            <button 
+                                onClick={(e) => handleReactivateClick(e, account)} 
+                                className="p-1.5 bg-slate-800 text-blue-500 hover:text-blue-400 rounded-lg border border-slate-700"
+                                title="Reativar Conta (Mover para Ativas)"
+                            >
+                                <RotateCcw size={14} />
+                            </button>
+                        )}
+                    </>
                 )}
                 
                 {onReplacement && account.status !== 'REPLACEMENT' && type !== 'DELETED' && (
@@ -479,8 +494,15 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                 <DollarSign size={14} className="text-emerald-400" />
                 <span>Depósito: <span className="text-slate-200 font-mono">R$ {account.depositValue.toFixed(2)}</span></span>
               </div>
+              {account.username && (
+                 <div className="flex items-center gap-2">
+                   <UserIcon size={14} className="text-slate-500" />
+                   <span className="text-xs text-slate-300">User: <span className="text-white">{account.username}</span></span>
+                 </div>
+              )}
               {account.password && (
                  <div className="flex items-center gap-2">
+                   <Key size={14} className="text-slate-500" />
                    <span className="text-xs text-slate-500">Senha:</span>
                    <span className="font-mono text-xs">•••••••</span>
                  </div>
@@ -524,20 +546,26 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
       {/* Account Details Modal */}
       {viewingAccount && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
-             <button onClick={() => setViewingAccount(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X /></button>
-             
-             <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-2">
-                <UserIcon className="text-indigo-400" />
-                {viewingAccount.name}
-             </h3>
-             <p className="text-sm text-slate-400 mb-6">{viewingAccount.house} • {viewingAccount.status}</p>
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl relative flex flex-col max-h-[90vh]">
+             {/* Fixed Header */}
+             <div className="p-6 pb-2 shrink-0 border-b border-slate-800/50">
+                 <button onClick={() => setViewingAccount(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 bg-slate-800/50 rounded-full"><X size={20}/></button>
+                 <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-2 pr-8">
+                    <UserIcon className="text-indigo-400" />
+                    <span className="truncate">{viewingAccount.name}</span>
+                 </h3>
+                 <p className="text-sm text-slate-400">{viewingAccount.house} • {viewingAccount.status}</p>
+             </div>
 
-             <div className="space-y-4">
+             {/* Scrollable Content */}
+             <div className="p-6 pt-4 overflow-y-auto space-y-4">
                 <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
                     <p className="text-xs text-slate-500 uppercase font-bold mb-2">Credenciais</p>
                     <div className="space-y-2 text-sm text-slate-300">
                         <div className="flex justify-between"><span>Email:</span> <span className="text-white select-all">{viewingAccount.email}</span></div>
+                        {viewingAccount.username && (
+                            <div className="flex justify-between"><span>Usuário:</span> <span className="text-white select-all">{viewingAccount.username}</span></div>
+                        )}
                         <div className="flex justify-between"><span>Senha:</span> <span className="text-white font-mono select-all">{viewingAccount.password || 'N/A'}</span></div>
                     </div>
                 </div>
@@ -552,7 +580,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                 {viewingAccount.card && (
                     <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
                         <p className="text-xs text-slate-500 uppercase font-bold mb-2">Dados do Card</p>
-                        <p className="text-sm text-slate-300 font-mono whitespace-pre-wrap">{viewingAccount.card}</p>
+                        <p className="text-sm text-slate-300 font-mono whitespace-pre-wrap break-words">{viewingAccount.card}</p>
                     </div>
                 )}
                 
@@ -656,6 +684,30 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                     />
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <label className="text-xs font-medium text-slate-400">Usuário (Login)</label>
+                        <div className="relative">
+                            <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+                            <input 
+                            type="text"
+                            value={editingAccount.username || ''}
+                            onChange={(e) => setEditingAccount({...editingAccount, username: e.target.value})}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-indigo-500"
+                            />
+                        </div>
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-xs font-medium text-slate-400">Senha</label>
+                        <input 
+                            type="text"
+                            value={editingAccount.password || ''}
+                            onChange={(e) => setEditingAccount({...editingAccount, password: e.target.value})}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-indigo-500"
+                        />
+                    </div>
+                </div>
+
                 <div className="space-y-1">
                     <label className="text-xs font-medium text-slate-400">Email de Acesso</label>
                     <input 
@@ -751,177 +803,6 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
              </form>
           </div>
         </div>
-      )}
-
-      {/* Limit Confirmation Modal */}
-      {selectedAccountForLimit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex items-center gap-3 text-amber-500 mb-4">
-              <AlertTriangle size={24} />
-              <h3 className="text-xl font-bold text-white">Limitar Conta</h3>
-            </div>
-            
-            <p className="text-slate-300 mb-4">
-              Você está marcando a conta <strong>{selectedAccountForLimit.name}</strong> como limitada. 
-              Deseja registrar automaticamente uma pendência de saque?
-            </p>
-            
-            <PixSelectionSection 
-                mode={pixSelectionMode} setMode={setPixSelectionMode}
-                selectedId={selectedPixId} setSelectedId={setSelectedPixId}
-                newString={newPixString} setNewString={setNewPixString}
-                pixKeys={pixKeys}
-            />
-
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => confirmLimit(true)}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-colors"
-              >
-                Sim, registrar saque e limitar
-              </button>
-              <button
-                onClick={() => confirmLimit(false)}
-                className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-medium transition-colors"
-              >
-                Não, apenas limitar
-              </button>
-              <button
-                onClick={resetModals}
-                className="w-full py-2 text-slate-500 hover:text-slate-400 text-sm"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Replacement Confirmation Modal */}
-      {selectedAccountForReplacement && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex items-center gap-3 text-rose-500 mb-4">
-              <RefreshCw size={24} />
-              <h3 className="text-xl font-bold text-white">Conta em Reposição</h3>
-            </div>
-            
-            <p className="text-slate-300 mb-4">
-              Você está marcando a conta <strong>{selectedAccountForReplacement.name}</strong> como defeituosa/reposição. 
-              Deseja registrar automaticamente uma pendência de saque?
-            </p>
-
-            <PixSelectionSection 
-                mode={pixSelectionMode} setMode={setPixSelectionMode}
-                selectedId={selectedPixId} setSelectedId={setSelectedPixId}
-                newString={newPixString} setNewString={setNewPixString}
-                pixKeys={pixKeys}
-            />
-
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => confirmReplacement(true)}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-colors"
-              >
-                Sim, registrar saque e marcar
-              </button>
-              <button
-                onClick={() => confirmReplacement(false)}
-                className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-medium transition-colors"
-              >
-                Não, apenas marcar
-              </button>
-              <button
-                onClick={resetModals}
-                className="w-full py-2 text-slate-500 hover:text-slate-400 text-sm"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Withdrawal Confirmation Modal (From Limited Tab) */}
-      {selectedAccountForWithdrawal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex items-center gap-3 text-emerald-500 mb-4">
-              <DollarSign size={24} />
-              <h3 className="text-xl font-bold text-white">Solicitar Saque</h3>
-            </div>
-            
-            <p className="text-slate-300 mb-4">
-              Registrar pendência de saque para a conta limitada <strong>{selectedAccountForWithdrawal.name}</strong>?
-            </p>
-
-            <PixSelectionSection 
-                mode={pixSelectionMode} setMode={setPixSelectionMode}
-                selectedId={selectedPixId} setSelectedId={setSelectedPixId}
-                newString={newPixString} setNewString={setNewPixString}
-                pixKeys={pixKeys}
-            />
-
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={confirmWithdrawal}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition-colors"
-              >
-                Confirmar Solicitação
-              </button>
-              <button
-                onClick={resetModals}
-                className="w-full py-2 text-slate-500 hover:text-slate-400 text-sm"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Deletion Modal */}
-      {selectedAccountForDeletion && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-                <div className="flex items-center gap-3 text-red-500 mb-4">
-                    <Trash2 size={24} />
-                    <h3 className="text-xl font-bold text-white">Excluir Conta</h3>
-                </div>
-                
-                <p className="text-slate-300 mb-4">
-                    Tem certeza que deseja excluir a conta <strong>{selectedAccountForDeletion.name}</strong>? 
-                    Ela será movida para a aba de "Contas Excluídas".
-                </p>
-
-                <div className="mb-6">
-                    <label className="text-xs font-medium text-slate-400 mb-2 block">Justificativa (Opcional)</label>
-                    <textarea
-                        rows={3}
-                        value={deletionReason}
-                        onChange={(e) => setDeletionReason(e.target.value)}
-                        placeholder="Ex: Conta banida, duplicada..."
-                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:ring-2 focus:ring-red-500/50 outline-none resize-none"
-                    />
-                </div>
-
-                <div className="flex flex-col gap-3">
-                    <button
-                        onClick={confirmDeletion}
-                        className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors"
-                    >
-                        Confirmar Exclusão
-                    </button>
-                    <button
-                        onClick={resetModals}
-                        className="w-full py-2 text-slate-500 hover:text-slate-400 text-sm"
-                    >
-                        Cancelar
-                    </button>
-                </div>
-            </div>
-          </div>
       )}
     </div>
   );
