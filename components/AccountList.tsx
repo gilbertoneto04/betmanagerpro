@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Account, Pack, PixKey, User, LogEntry } from '../types';
-import { Ban, DollarSign, User as UserIcon, Mail, AlertTriangle, Search, Plus, Pencil, Save, X, CreditCard, RefreshCw, Package, Tag, Landmark, RotateCcw, Trash2, Info, Calendar, Key, AtSign, Copy } from 'lucide-react';
+import { Ban, DollarSign, User as UserIcon, Mail, AlertTriangle, Search, Plus, Pencil, Save, X, CreditCard, RefreshCw, Package, Tag, Landmark, RotateCcw, Trash2, Info, Calendar, Key, AtSign, Copy, UserCheck } from 'lucide-react';
 
 interface AccountListProps {
   accounts: Account[];
@@ -715,44 +715,53 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                    </div>
                    <div className="space-y-1">
                       <label className="text-xs font-medium text-slate-400">Valor Depósito</label>
-                      <input 
-                         type="number"
-                         step="0.01"
-                         value={editingAccount.depositValue}
-                         onChange={(e) => setEditingAccount({...editingAccount, depositValue: parseFloat(e.target.value) || 0})}
-                         className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-indigo-500"
-                      />
+                      <div className="relative">
+                          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-500" size={14} />
+                          <input 
+                            type="number"
+                            step="0.01"
+                            value={editingAccount.depositValue}
+                            onChange={(e) => setEditingAccount({...editingAccount, depositValue: parseFloat(e.target.value) || 0})}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-indigo-500"
+                          />
+                      </div>
                    </div>
                 </div>
 
                 {/* Owner Field */}
                 <div className="space-y-1">
                     <label className="text-xs font-medium text-slate-400">Dono da Conta</label>
-                    <input 
-                       type="text"
-                       value={editingAccount.owner || ''}
-                       onChange={(e) => setEditingAccount({...editingAccount, owner: e.target.value})}
-                       placeholder="Nome do responsável"
-                       className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-indigo-500"
-                    />
+                    <div className="relative">
+                        <UserCheck className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-400" size={14} />
+                        <input 
+                        type="text"
+                        value={editingAccount.owner || ''}
+                        onChange={(e) => setEditingAccount({...editingAccount, owner: e.target.value})}
+                        placeholder="Nome do responsável"
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-indigo-500"
+                        />
+                    </div>
                 </div>
 
                 <div className="space-y-1">
                     <label className="text-xs font-medium text-slate-400">Nome do Titular</label>
-                    <input 
-                       type="text"
-                       required
-                       value={editingAccount.name}
-                       onChange={(e) => setEditingAccount({...editingAccount, name: e.target.value})}
-                       className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-indigo-500"
-                    />
+                    <div className="relative">
+                        <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+                        <input 
+                        type="text"
+                        required
+                        value={editingAccount.name}
+                        onChange={(e) => setEditingAccount({...editingAccount, name: e.target.value})}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-indigo-500"
+                        />
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                         <label className="text-xs font-medium text-slate-400">Usuário (Login)</label>
                         <div className="relative">
-                            <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+                            <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400" size={14} />
                             <input 
                             type="text"
                             value={editingAccount.username || ''}
@@ -763,23 +772,29 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                     </div>
                     <div className="space-y-1">
                         <label className="text-xs font-medium text-slate-400">Senha</label>
-                        <input 
-                            type="text"
-                            value={editingAccount.password || ''}
-                            onChange={(e) => setEditingAccount({...editingAccount, password: e.target.value})}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-indigo-500"
-                        />
+                        <div className="relative">
+                            <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" size={14} />
+                            <input 
+                                type="text"
+                                value={editingAccount.password || ''}
+                                onChange={(e) => setEditingAccount({...editingAccount, password: e.target.value})}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-indigo-500"
+                            />
+                        </div>
                     </div>
                 </div>
 
                 <div className="space-y-1">
                     <label className="text-xs font-medium text-slate-400">Email de Acesso</label>
-                    <input 
-                       type="text"
-                       value={editingAccount.email}
-                       onChange={(e) => setEditingAccount({...editingAccount, email: e.target.value})}
-                       className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-indigo-500"
-                    />
+                    <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400" size={14} />
+                        <input 
+                        type="text"
+                        value={editingAccount.email}
+                        onChange={(e) => setEditingAccount({...editingAccount, email: e.target.value})}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-indigo-500"
+                        />
+                    </div>
                 </div>
 
                 {/* Tags Input */}

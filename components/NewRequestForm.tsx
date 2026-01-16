@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { TaskStatus, Task, Account, PixKey, User } from '../types';
-import { Save, AlertCircle, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { TaskStatus, Task, Account, PixKey, User, TaskType } from '../types';
+import { Save, AlertCircle, CheckCircle2, Filter } from 'lucide-react';
 
 interface NewRequestFormProps {
   onSave: (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => void;
@@ -20,13 +20,43 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Account Filter State (Persisted)
+  const [filterActiveOnly, setFilterActiveOnly] = useState(() => {
+      const saved = localStorage.getItem('newRequest_filterActiveOnly');
+      return saved !== null ? JSON.parse(saved) : true;
+  });
+
   // Pix Selection
   const [pixSelectionMode, setPixSelectionMode] = useState<'SAVED' | 'NEW' | 'NONE'>('NONE');
   const [selectedPixId, setSelectedPixId] = useState('');
   const [newPixString, setNewPixString] = useState('');
 
-  // Filter Active Accounts
-  const activeAccounts = accounts.filter(a => a.status === 'ACTIVE');
+  // Persist filter choice
+  const toggleFilter = () => {
+      const newVal = !filterActiveOnly;
+      setFilterActiveOnly(newVal);
+      localStorage.setItem('newRequest_filterActiveOnly', JSON.stringify(newVal));
+      // Reset selection if the currently selected account becomes hidden
+      setSelectedAccountId('');
+  };
+
+  // Sort accounts: Active -> Limited -> Replacement -> Deleted
+  const sortedAccounts = useMemo(() => {
+    let filtered = accounts;
+    
+    if (filterActiveOnly) {
+        filtered = accounts.filter(a => a.status === 'ACTIVE');
+    }
+
+    return [...filtered].sort((a, b) => {
+        const statusOrder: Record<string, number> = { 'ACTIVE': 1, 'LIMITED': 2, 'REPLACEMENT': 3, 'DELETED': 4 };
+        const orderA = statusOrder[a.status] || 99;
+        const orderB = statusOrder[b.status] || 99;
+        
+        if (orderA !== orderB) return orderA - orderB;
+        return a.name.localeCompare(b.name);
+    });
+  }, [accounts, filterActiveOnly]);
 
   // Set defaults when lists load
   useEffect(() => {
@@ -44,23 +74,26 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
   // Auto-set house when account is selected, but allow change
   useEffect(() => {
     if (selectedAccountId) {
-        const acc = activeAccounts.find(a => a.id === selectedAccountId);
+        const acc = accounts.find(a => a.id === selectedAccountId);
         if (acc) {
             setHouse(acc.house);
         }
     }
-  }, [selectedAccountId, activeAccounts]);
+  }, [selectedAccountId, accounts]);
+
+  // Check if type requires Pix
+  const needsPix = type === 'SAQUE' || type === 'ENVIO_SALDO';
 
   // Auto-select default pix key
   useEffect(() => {
-    if (type === 'SAQUE' && currentUser?.defaultPixKeyId) {
+    if (needsPix && currentUser?.defaultPixKeyId) {
         setPixSelectionMode('SAVED');
         setSelectedPixId(currentUser.defaultPixKeyId);
     } else {
         setPixSelectionMode('NONE');
         setSelectedPixId('');
     }
-  }, [type, currentUser]);
+  }, [type, currentUser, needsPix]);
 
   const getPixInfoString = () => {
     if (pixSelectionMode === 'NONE') return undefined;
@@ -70,6 +103,22 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
         return key ? `Chave Pix (${key.name} - ${key.bank}): ${key.key}` : undefined;
     }
     return undefined;
+  };
+
+  const getAccountLabel = (acc: Account) => {
+      let label = `(${acc.house})`;
+      
+      if (acc.owner) {
+          label += `, ${acc.owner} - ${acc.name}`;
+      } else {
+          label += ` - ${acc.name}`;
+      }
+      
+      if (acc.status === 'LIMITED') label = `[LIMITADA] ${label}`;
+      else if (acc.status === 'REPLACEMENT') label = `[REPOSIÇÃO] ${label}`;
+      else if (acc.status === 'DELETED') label = `[EXCLUÍDA] ${label}`;
+      
+      return label;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -106,7 +155,7 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
     // Get Account Name
     let finalAccountName = 'N/A';
     if (!isContaNova && selectedAccountId) {
-        const acc = activeAccounts.find(a => a.id === selectedAccountId);
+        const acc = accounts.find(a => a.id === selectedAccountId);
         finalAccountName = acc ? acc.name : 'Desconhecida';
     }
 
@@ -125,7 +174,7 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
     setQuantity(1);
     setDescription('');
     // Reset pix to default
-    if (type === 'SAQUE' && currentUser?.defaultPixKeyId) {
+    if (needsPix && currentUser?.defaultPixKeyId) {
         setPixSelectionMode('SAVED');
         setSelectedPixId(currentUser.defaultPixKeyId);
     } else {
@@ -207,24 +256,38 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
             </div>
           ) : (
             <div className="space-y-2 animate-fadeIn">
-              <label className="text-sm font-medium text-slate-400">Selecione a Conta</label>
+              <div className="flex justify-between items-center">
+                  <label className="text-sm font-medium text-slate-400">Selecione a Conta</label>
+                  <label className="flex items-center gap-2 text-xs text-indigo-400 cursor-pointer hover:text-indigo-300 transition-colors bg-indigo-500/10 px-2 py-1 rounded-lg border border-indigo-500/20">
+                      <input 
+                        type="checkbox" 
+                        checked={filterActiveOnly} 
+                        onChange={toggleFilter}
+                        className="rounded text-indigo-500 focus:ring-0 bg-transparent border-indigo-500/50"
+                      />
+                      Exibir apenas contas em uso
+                  </label>
+              </div>
               <select
                 value={selectedAccountId}
                 onChange={(e) => setSelectedAccountId(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none"
               >
                  <option value="">Selecione...</option>
-                 {activeAccounts.map(acc => (
-                     <option key={acc.id} value={acc.id}>
-                         {acc.name} ({acc.house}) {acc.owner ? `- ${acc.owner}` : ''}
+                 {sortedAccounts.map(acc => (
+                     <option key={acc.id} value={acc.id} className={acc.status !== 'ACTIVE' ? 'text-amber-300' : ''}>
+                         {getAccountLabel(acc)}
                      </option>
                  ))}
               </select>
+              {sortedAccounts.length === 0 && (
+                  <p className="text-xs text-slate-500 mt-1">Nenhuma conta encontrada com o filtro atual.</p>
+              )}
             </div>
           )}
 
-          {/* Pix Section - Only for SAQUE */}
-          {type === 'SAQUE' && (
+          {/* Pix Section - Only for SAQUE or ENVIO_SALDO */}
+          {needsPix && (
               <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 animate-fadeIn">
                   <label className="text-sm font-medium text-slate-400 block mb-2">Chave Pix de Destino</label>
                   <div className="flex gap-2 mb-3">
