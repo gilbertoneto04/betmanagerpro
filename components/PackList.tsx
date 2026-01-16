@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Pack, Account, User, LogEntry } from '../types';
 import { Package, Plus, ChevronDown, ChevronUp, CheckCircle2, DollarSign, RefreshCw, Pencil, X, Tag, CreditCard, Ban, Trash2, User as UserIcon } from 'lucide-react';
+import { ACCOUNT_STATUS_LABELS } from '../constants';
 
 interface PackListProps {
   packs: Pack[];
@@ -207,7 +208,7 @@ export const PackList: React.FC<PackListProps> = ({ packs, accounts, availableHo
                                 <div className="flex justify-between items-start mb-2">
                                     <div className="font-bold text-white truncate max-w-[120px]">{acc.name}</div>
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded border ${getStatusColor(acc.status)}`}>
-                                        {acc.status}
+                                        {ACCOUNT_STATUS_LABELS[acc.status] || acc.status}
                                     </span>
                                 </div>
                                 
@@ -275,7 +276,7 @@ export const PackList: React.FC<PackListProps> = ({ packs, accounts, availableHo
                     <UserIcon className="text-indigo-400" />
                     <span className="truncate">{viewingAccount.name}</span>
                  </h3>
-                 <p className="text-sm text-slate-400">{viewingAccount.house} • {viewingAccount.status}</p>
+                 <p className="text-sm text-slate-400">{viewingAccount.house} • {ACCOUNT_STATUS_LABELS[viewingAccount.status] || viewingAccount.status}</p>
              </div>
 
              {/* Scrollable Content */}

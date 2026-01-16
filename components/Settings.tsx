@@ -59,7 +59,11 @@ export const Settings: React.FC<SettingsProps> = ({
   const handleAddHouse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newHouse.trim()) {
-      await addDoc(collection(db, 'config_houses'), { name: newHouse.trim(), order: houses.length });
+      await addDoc(collection(db, 'config_houses'), { 
+          name: newHouse.trim(), 
+          order: houses.length,
+          createdAt: new Date().toISOString()
+      });
       logAction('Configuração: Casas', `Adicionou a casa: ${newHouse.trim()}`);
       setNewHouse('');
     }
@@ -105,7 +109,8 @@ export const Settings: React.FC<SettingsProps> = ({
       await addDoc(collection(db, 'config_types'), { 
           label: newTypeLabel.trim(), 
           value: val,
-          order: taskTypes.length 
+          order: taskTypes.length,
+          createdAt: new Date().toISOString()
       });
       logAction('Configuração: Tipos', `Adicionou o tipo: ${newTypeLabel.trim()}`);
       setNewTypeLabel('');
@@ -152,7 +157,8 @@ export const Settings: React.FC<SettingsProps> = ({
             name: pixName,
             bank: pixBank,
             keyType: pixKeyType,
-            key: pixKey
+            key: pixKey,
+            createdAt: new Date().toISOString()
         };
         await addDoc(collection(db, 'pixKeys'), newPix);
         logAction('Configuração: Pix', `Adicionou chave Pix: ${pixName} (${pixBank})`);

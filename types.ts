@@ -25,6 +25,7 @@ export interface User {
   password?: string;
   role: 'ADMIN' | 'USER' | 'AGENCIA' | 'KFB';
   defaultPixKeyId?: string;
+  createdAt?: string;
 }
 
 export interface PixKey {
@@ -33,6 +34,7 @@ export interface PixKey {
   bank: string;
   keyType: 'CPF' | 'CNPJ' | 'EMAIL' | 'TELEFONE' | 'ALEATORIA';
   key: string;
+  createdAt: string;
 }
 
 export interface Task {
@@ -46,6 +48,7 @@ export interface Task {
   status: TaskStatus;
   deletionReason?: string;
   orderIndex?: number;
+  createdBy?: string; // Name of the user who requested the task
   finishedBy?: string; // ID of the AGENCIA user who finished it
   createdAt: string;
   updatedAt: string;
@@ -69,7 +72,6 @@ export interface Account {
   username?: string; // Login na casa de aposta
   email: string;
   password?: string; // Senha na casa de aposta
-  card?: string;
   house: string;
   depositValue: number;
   status: 'ACTIVE' | 'LIMITED' | 'REPLACEMENT' | 'DELETED';
@@ -82,6 +84,7 @@ export interface Account {
   updatedAt?: string;
   taskIdSource?: string;
   packId?: string;
+  card?: string; // Moved to end as requested
 }
 
 export interface LogEntry {

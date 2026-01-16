@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Account, Pack, PixKey, User, LogEntry } from '../types';
+import { Account, Pack, PixKey, User, LogEntry, Task } from '../types';
 import { Ban, DollarSign, User as UserIcon, Mail, AlertTriangle, Search, Plus, Pencil, Save, X, CreditCard, RefreshCw, Package, Tag, Landmark, RotateCcw, Trash2, Info, Calendar, Key, AtSign, Copy, UserCheck } from 'lucide-react';
+import { ACCOUNT_STATUS_LABELS } from '../constants';
 
 interface AccountListProps {
   accounts: Account[];
@@ -16,6 +17,8 @@ interface AccountListProps {
   onSave?: (account: Account, packIdToDeduct?: string) => void;
   availableHouses: string[];
   logs?: LogEntry[]; // Passed for history Modal
+  tasks?: Task[]; // Passed to check for pending tasks
+  availableTypes?: { label: string, value: string }[];
 }
 
 // Extracted Component to prevent re-render focus loss
@@ -71,7 +74,7 @@ const PixSelectionSection: React.FC<{
 );
 
 
-export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs, pixKeys, currentUser, onLimit, onReplacement, onWithdraw, onReactivate, onDelete, onSave, availableHouses, logs }) => {
+export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs, pixKeys, currentUser, onLimit, onReplacement, onWithdraw, onReactivate, onDelete, onSave, availableHouses, logs, tasks, availableTypes }) => {
   const [selectedAccountForLimit, setSelectedAccountForLimit] = useState<Account | null>(null);
   const [selectedAccountForReplacement, setSelectedAccountForReplacement] = useState<Account | null>(null);
   const [selectedAccountForWithdrawal, setSelectedAccountForWithdrawal] = useState<Account | null>(null);
@@ -257,7 +260,9 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
       tags: [],
       owner: currentUser?.name || '' // Default owner is current user
     });
-    setUsePack(false); 
+    // Default: Reduce pack is true, unless admin chooses otherwise.
+    // If not admin, we force true basically.
+    setUsePack(true); 
     setSelectedPackId('');
   };
 
@@ -284,6 +289,15 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
         alert("Nome e Casa são obrigatórios.");
         return;
       }
+      
+      // New Account Pack Rule
+      if (!editingAccount.id && editingAccount.status === 'ACTIVE') {
+          if (currentUser?.role !== 'ADMIN' && (!usePack || !selectedPackId)) {
+              alert("Você deve selecionar um Pack para criar uma nova conta.");
+              return;
+          }
+      }
+
       onSave(
           editingAccount as Account, 
           (!editingAccount.id && usePack && selectedPackId) ? selectedPackId : undefined
@@ -314,6 +328,17 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
           (l.taskDescription && l.taskDescription.includes(accName)) || 
           (l.taskId === accId) 
       ).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  };
+
+  // Get specific pending task name
+  const getPendingTaskName = (account: Account) => {
+      if (!tasks) return null;
+      const task = tasks.find(t => t.accountName === account.name && t.house === account.house && t.status !== 'FINALIZADA' && t.status !== 'EXCLUIDA');
+      if (task) {
+          const typeLabel = availableTypes?.find(at => at.value === task.type)?.label || task.type;
+          return typeLabel;
+      }
+      return null;
   };
 
   return (
@@ -367,14 +392,27 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
 
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filteredAccounts.map(account => (
+        {filteredAccounts.map(account => {
+            const pendingTaskName = getPendingTaskName(account);
+            
+            return (
           <div 
             key={account.id} 
             onClick={() => setViewingAccount(account)}
-            className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm hover:border-indigo-500/30 transition-all group relative cursor-pointer"
+            className={`bg-slate-900 border rounded-xl p-5 shadow-sm transition-all group relative cursor-pointer ${
+                pendingTaskName ? 'border-amber-500/50 shadow-[0_0_15px_-5px_rgba(245,158,11,0.3)]' : 'border-slate-800 hover:border-indigo-500/30'
+            }`}
           >
-             {/* Action Buttons - Always visible now for better UX, Z-Index boosted */}
-             <div className="absolute top-4 right-4 flex gap-2 z-20">
+             {/* Pending Status Badge */}
+             {pendingTaskName && (
+                 <div className="absolute top-0 left-0 bg-amber-500 text-black text-[10px] px-2 py-0.5 rounded-br-lg font-bold flex items-center gap-1 z-10 shadow-sm">
+                     <AlertTriangle size={10} />
+                     {pendingTaskName}
+                 </div>
+             )}
+
+             {/* Action Buttons - Visible on Mobile, Hover on Desktop, Z-Index boosted */}
+             <div className="absolute top-4 right-4 flex gap-2 z-20 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-200">
                 <button 
                     onClick={(e) => handleHistoryClick(e, account)} 
                     className="p-1.5 bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors"
@@ -580,7 +618,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                {getDateLabel(account)}
             </div>
           </div>
-        ))}
+        )})}
         
         {filteredAccounts.length === 0 && (
           <div className="col-span-full py-12 text-center text-slate-500 border border-dashed border-slate-800 rounded-xl bg-slate-900/20">
@@ -600,7 +638,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                     <UserIcon className="text-indigo-400" />
                     <span className="truncate">{viewingAccount.name}</span>
                  </h3>
-                 <p className="text-sm text-slate-400">{viewingAccount.house} • {viewingAccount.status}</p>
+                 <p className="text-sm text-slate-400">{viewingAccount.house} • {ACCOUNT_STATUS_LABELS[viewingAccount.status] || viewingAccount.status}</p>
              </div>
 
              {/* Scrollable Content */}
@@ -840,13 +878,18 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                                  <Package size={16} className="text-slate-400" />
                                  <span className="text-xs font-medium text-slate-300">Reduzir do Pack</span>
                              </div>
-                             <input 
-                                 type="checkbox" 
-                                 checked={usePack}
-                                 onChange={(e) => setUsePack(e.target.checked)}
-                             />
+                             <label className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={usePack}
+                                    disabled={currentUser?.role !== 'ADMIN'} // Only admin can uncheck
+                                    onChange={(e) => setUsePack(e.target.checked)}
+                                    className="sr-only peer"
+                                />
+                                <div className={`w-11 h-6 peer-focus:outline-none rounded-full peer after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${currentUser?.role !== 'ADMIN' ? 'opacity-50 cursor-not-allowed bg-indigo-600 after:translate-x-full after:border-white' : 'bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white peer-checked:bg-indigo-600'}`}></div>
+                             </label>
                         </div>
-                        {usePack && (
+                        {(usePack || currentUser?.role !== 'ADMIN') && (
                              <select 
                                  value={selectedPackId}
                                  onChange={(e) => setSelectedPackId(e.target.value)}
@@ -862,12 +905,15 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                                  ))}
                              </select>
                         )}
+                        {usePack && packs.filter(p => p.house === editingAccount.house && p.status === 'ACTIVE').length === 0 && (
+                            <p className="text-[10px] text-red-400 mt-1">Nenhum pack ativo disponível para {editingAccount.house}.</p>
+                        )}
                      </div>
                 )}
                 
                 {/* Status Indicator (Read-only) */}
                 <div className="text-xs text-center text-slate-500 pt-2 border-t border-slate-800 mt-4">
-                    Criando conta como: <span className="font-bold text-white">{editingAccount.status}</span>
+                    Criando conta como: <span className="font-bold text-white">{ACCOUNT_STATUS_LABELS[editingAccount.status!] || editingAccount.status}</span>
                 </div>
 
                 <div className="pt-2 flex gap-3">

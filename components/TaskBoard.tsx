@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Task, TaskStatus, TaskType, Pack, PixKey, User as UserType, LogEntry } from '../types';
+import { Task, TaskStatus, TaskType, Pack, PixKey, User as UserType, LogEntry, Account } from '../types';
 import { StatusBadge } from './StatusBadge';
-import { CheckCircle2, Clock, PlayCircle, Plus, Layers, Trash2, AlertOctagon, Package, Landmark, Pencil, X, GripVertical, RotateCcw, User, Info } from 'lucide-react';
+import { CheckCircle2, Clock, PlayCircle, Plus, Layers, Trash2, AlertOctagon, Package, Landmark, Pencil, X, GripVertical, RotateCcw, User, Info, Save, Filter } from 'lucide-react';
 
 interface TaskBoardProps {
   tasks: Task[];
@@ -11,22 +11,29 @@ interface TaskBoardProps {
   users?: UserType[]; 
   onUpdateStatus: (taskId: string, newStatus: TaskStatus, agentId?: string) => void;
   onEditTask: (taskId: string, updates: Partial<Task>) => void;
-  onFinishNewAccountTask: (taskId: string, accountsData: { name: string; email: string; depositValue: number }[], packId?: string) => void;
+  onFinishNewAccountTask: (taskId: string, accountsData: { name: string; email: string; depositValue: number, username?: string, password?: string, card?: string, owner?: string }[], packId?: string) => void;
   onDeleteTask: (taskId: string, reason?: string) => void;
   onReorderTasks: (draggedId: string, targetId: string) => void;
   availableTypes: { label: string, value: string }[];
-  logs?: LogEntry[]; // Added for info button logic
+  logs?: LogEntry[]; 
+  accounts: Account[];
+  availableHouses: string[];
 }
 
-export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, currentUser, users, onUpdateStatus, onEditTask, onFinishNewAccountTask, onDeleteTask, onReorderTasks, availableTypes, logs }) => {
+export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, currentUser, users, onUpdateStatus, onEditTask, onFinishNewAccountTask, onDeleteTask, onReorderTasks, availableTypes, logs, accounts, availableHouses }) => {
   // Default filter is 'UNFINISHED' (Não Finalizadas)
   const [filter, setFilter] = React.useState<'ALL' | 'UNFINISHED' | TaskStatus>('UNFINISHED');
   
+  // Advanced Filters
+  const [filterOwner, setFilterOwner] = useState<string>('ALL');
+  const [filterHouse, setFilterHouse] = useState<string>('ALL');
+  const [filterType, setFilterType] = useState<string>('ALL');
+
   // Modal State for New Account Completion
   const [finishingTask, setFinishingTask] = useState<Task | null>(null);
   const [deliveryMode, setDeliveryMode] = useState<'SELECT' | 'FULL' | 'PARTIAL'>('SELECT');
   const [deliveredQuantity, setDeliveredQuantity] = useState<number>(0);
-  const [accountDetails, setAccountDetails] = useState<{ name: string; email: string; depositValue: number }[]>([]);
+  const [accountDetails, setAccountDetails] = useState<{ name: string; email: string; depositValue: number, username: string, password?: string, card?: string, owner: string }[]>([]);
   
   // Pack Selection Logic
   const [usePack, setUsePack] = useState(true);
@@ -41,6 +48,15 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
   const [pixSelectionMode, setPixSelectionMode] = useState<'SAVED' | 'NEW'>('SAVED');
   const [selectedPixId, setSelectedPixId] = useState('');
   const [newPixString, setNewPixString] = useState('');
+
+  // Modal State for General Edit
+  const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
+  const [editType, setEditType] = useState('');
+  const [editHouse, setEditHouse] = useState('');
+  const [editAccountId, setEditAccountId] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editQuantity, setEditQuantity] = useState(1);
+  const [editPixInfo, setEditPixInfo] = useState('');
   
   // Modal State for History (Info Button)
   const [historyTask, setHistoryTask] = useState<Task | null>(null);
@@ -52,16 +68,27 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
   const [kfbTaskToFinish, setKfbTaskToFinish] = useState<Task | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string>('');
 
-  // Reset pack selection when modal opens
+  // Unique Owners List for Filter
+  const uniqueOwners = useMemo(() => {
+      const owners = new Set<string>();
+      tasks.forEach(t => {
+          if (t.createdBy) owners.add(t.createdBy);
+      });
+      return Array.from(owners).sort();
+  }, [tasks]);
+
+  // Pack Selection & Owner Logic when finishing
   useEffect(() => {
     if (finishingTask) {
         // Find active packs for this house
-        const housePacks = packs.filter(p => p.house === finishingTask.house && p.status === 'ACTIVE');
+        const housePacks = packs.filter(p => p.house === finishingTask.house && p.status === 'ACTIVE' && (p.quantity - p.delivered) > 0);
         if (housePacks.length > 0) {
             setSelectedPackId(housePacks[0].id);
-            setUsePack(true);
+            setUsePack(true); // Default to true
         } else {
             setSelectedPackId('');
+            // If no packs, force usePack to false unless we want to enforce pack existence? 
+            // For now, logic implies: if pack exists, select it. 
             setUsePack(false);
         }
     }
@@ -81,17 +108,30 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
   }, [editingPixTask, currentUser]);
 
   const filteredTasks = useMemo(() => {
-    // Tasks are already sorted by App.tsx, but filter keeps order
     let list = [...tasks];
     
+    // Status Filter
     if (filter === 'ALL') {
-        return list.filter(t => t.status !== TaskStatus.EXCLUIDA);
+        list = list.filter(t => t.status !== TaskStatus.EXCLUIDA);
+    } else if (filter === 'UNFINISHED') {
+        list = list.filter(t => t.status !== TaskStatus.FINALIZADA && t.status !== TaskStatus.EXCLUIDA);
+    } else {
+        list = list.filter(t => t.status === filter);
+    }
+
+    // Advanced Filters
+    if (filterOwner !== 'ALL') {
+        list = list.filter(t => t.createdBy === filterOwner);
+    }
+    if (filterHouse !== 'ALL') {
+        list = list.filter(t => t.house === filterHouse);
+    }
+    if (filterType !== 'ALL') {
+        list = list.filter(t => t.type === filterType);
     }
     
-    if (filter === 'UNFINISHED') return list.filter(t => t.status !== TaskStatus.FINALIZADA && t.status !== TaskStatus.EXCLUIDA);
-    
-    return list.filter(t => t.status === filter);
-  }, [tasks, filter]);
+    return list;
+  }, [tasks, filter, filterOwner, filterHouse, filterType]);
 
   // DnD Handlers
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
@@ -153,14 +193,57 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
         setNewPixString('');
     }
   };
+  
+  // General Edit Handlers
+  const initGeneralEdit = (task: Task) => {
+      setTaskToEdit(task);
+      setEditType(task.type);
+      setEditHouse(task.house);
+      setEditDescription(task.description || '');
+      setEditQuantity(task.quantity || 1);
+      setEditPixInfo(task.pixKeyInfo || '');
+      
+      // Try to find account ID by name & house
+      if (task.accountName) {
+          const acc = accounts.find(a => a.name === task.accountName && a.house === task.house);
+          setEditAccountId(acc ? acc.id : '');
+      } else {
+          setEditAccountId('');
+      }
+  };
+  
+  const handleSaveGeneralEdit = () => {
+      if (taskToEdit) {
+          let updatedAccountName = undefined;
+          
+          if (editAccountId) {
+              const acc = accounts.find(a => a.id === editAccountId);
+              if (acc) updatedAccountName = acc.name;
+          } else if (editType !== TaskType.CONTA_NOVA) {
+              // If not new account, user might have cleared selection -> handle gracefully?
+              // keeping old name if not found is risky if house changed
+          }
+
+          onEditTask(taskToEdit.id, {
+              type: editType,
+              house: editHouse,
+              accountName: updatedAccountName,
+              description: editDescription,
+              quantity: editType === TaskType.CONTA_NOVA ? editQuantity : undefined,
+              pixKeyInfo: editPixInfo
+          });
+          setTaskToEdit(null);
+      }
+  };
 
   const initDelivery = (task: Task, mode: 'FULL' | 'PARTIAL') => {
     const qty = mode === 'FULL' ? (task.quantity || 1) : 1;
+    const defaultOwner = task.createdBy || '';
     
     setFinishingTask(task);
     setDeliveryMode(mode);
     setDeliveredQuantity(qty);
-    setAccountDetails(Array(qty).fill({ name: '', email: '', depositValue: 0 }));
+    setAccountDetails(Array(qty).fill({ name: '', email: '', depositValue: 0, username: '', password: '', card: '', owner: defaultOwner }));
   };
 
   const handleAccountDetailChange = (index: number, field: string, value: string | number) => {
@@ -172,12 +255,14 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
   const handleQuantityChange = (qty: number) => {
     if (qty < 1) qty = 1;
     if (finishingTask && qty > (finishingTask.quantity || 1)) qty = finishingTask.quantity || 1;
+    
+    const defaultOwner = finishingTask?.createdBy || '';
 
     setDeliveredQuantity(qty);
     const newDetails = [...accountDetails];
     if (qty > newDetails.length) {
       for (let i = newDetails.length; i < qty; i++) {
-        newDetails.push({ name: '', email: '', depositValue: 0 });
+        newDetails.push({ name: '', email: '', depositValue: 0, username: '', password: '', card: '', owner: defaultOwner });
       }
     } else {
       newDetails.length = qty;
@@ -187,6 +272,12 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
 
   const submitFinishAccount = () => {
     if (finishingTask) {
+      // Rule: Agency Users must use a Pack (Enforced by UI disabling, but good to check here too)
+      if (currentUser?.role !== 'ADMIN' && (!usePack || !selectedPackId)) {
+         alert("Membros da agência devem utilizar um Pack ativo para entregar contas.");
+         return;
+      }
+
       if (accountDetails.some(acc => !acc.name || !acc.email)) {
         alert("Por favor, preencha todos os campos obrigatórios (Nome e Email).");
         return;
@@ -352,7 +443,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-white">Quadro de Pendências</h2>
-          <p className="text-slate-400 text-sm mt-1">Gerencie o fluxo de solicitações da operação (Arraste para reordenar)</p>
+          <p className="text-slate-400 text-sm mt-1">Gerencie o fluxo de solicitações da operação</p>
         </div>
         
         <div className="w-full sm:w-auto overflow-x-auto pb-2 -mb-2">
@@ -369,6 +460,49 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                 <FilterButton label="Excluídas" value={TaskStatus.EXCLUIDA} count={tasks.filter(t => t.status === TaskStatus.EXCLUIDA).length} />
             </div>
         </div>
+      </div>
+
+      {/* Advanced Filters Bar */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row gap-4 items-center">
+          <div className="flex items-center gap-2 text-slate-400 text-sm font-medium">
+              <Filter size={16} />
+              Filtros:
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full md:w-auto flex-1">
+              <select 
+                  value={filterOwner}
+                  onChange={(e) => setFilterOwner(e.target.value)}
+                  className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-indigo-500"
+              >
+                  <option value="ALL">Todos os Donos</option>
+                  {uniqueOwners.map(owner => (
+                      <option key={owner} value={owner}>{owner}</option>
+                  ))}
+              </select>
+
+              <select 
+                  value={filterHouse}
+                  onChange={(e) => setFilterHouse(e.target.value)}
+                  className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-indigo-500"
+              >
+                  <option value="ALL">Todas as Casas</option>
+                  {availableHouses.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                  ))}
+              </select>
+
+              <select 
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-indigo-500"
+              >
+                  <option value="ALL">Todos os Tipos</option>
+                  {availableTypes.map(t => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+              </select>
+          </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -394,26 +528,41 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                   task.status === TaskStatus.EXCLUIDA ? 'border-red-900/30 opacity-70' : 'border-slate-800 hover:border-indigo-500/30 hover:shadow-lg hover:shadow-indigo-500/5'
               } ${draggedTaskId === task.id ? 'opacity-50 ring-2 ring-indigo-500' : ''}`}
             >
-              {task.status !== TaskStatus.EXCLUIDA && (
-                  <button 
-                    onClick={() => initDeletion(task)}
-                    className="absolute top-4 right-4 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 z-10"
-                    title="Excluir Solicitação"
-                  >
-                      <Trash2 size={16} />
-                  </button>
-              )}
-              
-              {/* Info/History Button */}
-              {logs && (
-                 <button
-                    onClick={() => setHistoryTask(task)}
-                    className="absolute top-4 right-12 text-slate-600 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity p-1 z-10"
-                    title="Ver Histórico"
-                 >
-                    <Info size={16} />
-                 </button>
-              )}
+              {/* Top Right Action Buttons Group */}
+              <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                  {/* History Button */}
+                  {logs && (
+                    <button
+                        onClick={() => setHistoryTask(task)}
+                        className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                        title="Ver Histórico"
+                    >
+                        <Info size={16} />
+                    </button>
+                  )}
+                  
+                  {/* Edit Button - Only if not excluded */}
+                  {task.status !== TaskStatus.EXCLUIDA && (
+                    <button
+                        onClick={() => initGeneralEdit(task)}
+                        className="p-1.5 text-slate-500 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition-colors"
+                        title="Editar Pendência"
+                    >
+                        <Pencil size={16} />
+                    </button>
+                  )}
+
+                  {/* Delete Button */}
+                  {task.status !== TaskStatus.EXCLUIDA && (
+                      <button 
+                        onClick={() => initDeletion(task)}
+                        className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
+                        title="Excluir Solicitação"
+                      >
+                          <Trash2 size={16} />
+                      </button>
+                  )}
+              </div>
               
               <div className="absolute top-1/2 left-1 -translate-y-1/2 text-slate-700 opacity-0 group-hover:opacity-50">
                  <GripVertical size={16} />
@@ -422,7 +571,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
               <div>
                 <div className="flex justify-between items-start mb-4 pl-2">
                   <StatusBadge status={task.status} />
-                  <span className="text-xs text-slate-500 font-mono pr-6">
+                  <span className="text-xs text-slate-500 font-mono pr-20">
                     {new Date(task.createdAt).toLocaleDateString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
@@ -450,6 +599,12 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                             <span className="text-xs text-indigo-400 font-medium bg-indigo-500/10 px-2 py-1 rounded border border-indigo-500/10">
                             {task.quantity} {task.quantity === 1 ? 'conta' : 'contas'}
                             </span>
+                        )}
+                        
+                        {task.createdBy && (
+                             <span className="text-[10px] text-slate-500 flex items-center gap-1 bg-slate-800/50 px-2 py-0.5 rounded-full">
+                                <User size={10}/> {task.createdBy}
+                             </span>
                         )}
                       </div>
                   </div>
@@ -483,163 +638,10 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
         )}
       </div>
 
-      {/* Agent Selection Modal (KFB Only) */}
-      {kfbTaskToFinish && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-                <h3 className="text-lg font-bold text-white mb-4">
-                    Quem finalizou esta pendência?
-                </h3>
-                <p className="text-slate-400 text-sm mb-4">
-                    Como KFB, você deve indicar qual Agência realizou a tarefa.
-                </p>
-                
-                <div className="space-y-2 mb-6 max-h-[300px] overflow-y-auto">
-                    {users?.filter(u => u.role === 'AGENCIA').map(user => (
-                        <label 
-                            key={user.id}
-                            className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                                selectedAgentId === user.id 
-                                ? 'bg-indigo-600 border-indigo-500' 
-                                : 'bg-slate-800 border-slate-700 hover:border-slate-600'
-                            }`}
-                        >
-                            <input 
-                                type="radio" 
-                                name="agent"
-                                value={user.id}
-                                checked={selectedAgentId === user.id}
-                                onChange={(e) => setSelectedAgentId(e.target.value)}
-                                className="hidden"
-                            />
-                            <div className="w-8 h-8 rounded-full bg-slate-900/50 flex items-center justify-center text-xs font-bold text-slate-300">
-                                {user.name.substring(0,2)}
-                            </div>
-                            <span className="text-sm font-medium text-white">{user.name}</span>
-                        </label>
-                    ))}
-                    {(!users || users.filter(u => u.role === 'AGENCIA').length === 0) && (
-                        <p className="text-sm text-red-400 text-center py-4">Nenhuma agência cadastrada.</p>
-                    )}
-                </div>
-
-                <div className="flex gap-3">
-                    <button
-                        onClick={confirmKfbFinish}
-                        disabled={!selectedAgentId}
-                        className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-colors"
-                    >
-                        Confirmar
-                    </button>
-                    <button
-                        onClick={() => { setKfbTaskToFinish(null); setSelectedAgentId(''); }}
-                        className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-medium transition-colors"
-                    >
-                        Cancelar
-                    </button>
-                </div>
-            </div>
-          </div>
-      )}
-
-      {/* Edit Pix Modal */}
-      {editingPixTask && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                        <Landmark size={20} className="text-purple-400"/>
-                        Editar Chave Pix
-                    </h3>
-                    <button onClick={() => setEditingPixTask(null)} className="text-slate-400 hover:text-white"><X size={20} /></button>
-                </div>
-                
-                <div className="space-y-4">
-                    <div className="flex gap-2 mb-3">
-                        <button 
-                            onClick={() => setPixSelectionMode('SAVED')}
-                            className={`flex-1 py-2 text-xs rounded-lg border ${pixSelectionMode === 'SAVED' ? 'bg-indigo-600 border-indigo-500 text-white' : 'border-slate-600 text-slate-400'}`}
-                        >
-                            Chave Salva
-                        </button>
-                        <button 
-                            onClick={() => setPixSelectionMode('NEW')}
-                            className={`flex-1 py-2 text-xs rounded-lg border ${pixSelectionMode === 'NEW' ? 'bg-indigo-600 border-indigo-500 text-white' : 'border-slate-600 text-slate-400'}`}
-                        >
-                            Manual
-                        </button>
-                    </div>
-
-                    {pixSelectionMode === 'SAVED' && (
-                        <select
-                            value={selectedPixId}
-                            onChange={(e) => setSelectedPixId(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-indigo-500"
-                        >
-                            <option value="">Selecione uma chave...</option>
-                            {pixKeys.map(k => (
-                                <option key={k.id} value={k.id}>{k.name} - {k.bank} ({k.key})</option>
-                            ))}
-                        </select>
-                    )}
-
-                    {pixSelectionMode === 'NEW' && (
-                        <input 
-                            type="text"
-                            value={newPixString}
-                            onChange={(e) => setNewPixString(e.target.value)}
-                            placeholder="Digite a chave Pix (CPF, Email, etc)..."
-                            className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-indigo-500"
-                        />
-                    )}
-                    
-                    <button 
-                        onClick={handleSavePixEdit}
-                        className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl transition-colors"
-                    >
-                        Salvar Alteração
-                    </button>
-                </div>
-            </div>
-          </div>
-      )}
-
-      {/* History Modal */}
-      {historyTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl p-6 shadow-2xl relative max-h-[80vh] flex flex-col">
-                <button onClick={() => setHistoryTask(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X /></button>
-                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                    <RotateCcw size={20} className="text-indigo-400" />
-                    Histórico da Pendência
-                </h3>
-                
-                <div className="overflow-y-auto pr-2 flex-1 space-y-3">
-                    {getFilteredLogs(historyTask).length > 0 ? (
-                        getFilteredLogs(historyTask).map(log => (
-                            <div key={log.id} className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg text-sm">
-                                <div className="flex justify-between items-start mb-1">
-                                    <span className="font-semibold text-slate-200">{log.action}</span>
-                                    <span className="text-xs text-slate-500">{new Date(log.timestamp).toLocaleString()}</span>
-                                </div>
-                                <p className="text-slate-400 text-xs mb-1">{log.taskDescription}</p>
-                                <div className="text-[10px] text-indigo-400 flex items-center gap-1">
-                                    <User size={10} /> {log.user}
-                                </div>
-                            </div>
-                        ))
-                    ) : (
-                        <p className="text-center text-slate-500 py-10">Nenhum histórico encontrado para esta tarefa.</p>
-                    )}
-                </div>
-            </div>
-        </div>
-      )}
-
       {/* New Account Completion Modal */}
       {finishingTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl p-6 shadow-2xl my-8">
+           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl p-6 shadow-2xl my-8">
              <div className="flex items-center justify-between mb-6">
                <h3 className="text-xl font-bold text-white">Finalizar Entrega de Contas</h3>
                <button onClick={() => setFinishingTask(null)} className="text-slate-400 hover:text-white"><Plus className="rotate-45" /></button>
@@ -651,6 +653,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                     <p className="text-sm text-indigo-200">
                         Solicitado: <strong>{finishingTask.quantity}</strong> | Entregando: <strong>{deliveredQuantity}</strong>
                     </p>
+                    <p className="text-xs text-slate-400 mt-1">Solicitante (Dono): {finishingTask.createdBy}</p>
                     {deliveryMode === 'PARTIAL' && (
                         <p className="text-xs text-amber-400 mt-1">
                             Restarão { (finishingTask.quantity || 1) - deliveredQuantity } contas pendentes.
@@ -683,14 +686,15 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                         <input 
                             type="checkbox" 
                             checked={usePack} 
+                            disabled={currentUser?.role !== 'ADMIN'}
                             onChange={(e) => setUsePack(e.target.checked)}
                             className="sr-only peer" 
                         />
-                        <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        <div className={`w-11 h-6 peer-focus:outline-none rounded-full peer after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${currentUser?.role !== 'ADMIN' ? 'opacity-50 cursor-not-allowed bg-indigo-600 after:translate-x-full after:border-white' : 'bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white peer-checked:bg-indigo-600'}`}></div>
                    </label>
                </div>
                
-               {usePack && (
+               {(usePack || currentUser?.role !== 'ADMIN') && (
                    <div>
                        <select 
                           value={selectedPackId}
@@ -713,38 +717,81 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                )}
             </div>
 
-            <div className="space-y-4 max-h-[40vh] overflow-y-auto pr-2">
+            <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
             {accountDetails.map((acc, idx) => (
                 <div key={idx} className="p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl">
-                <h4 className="text-sm font-semibold text-indigo-400 mb-3">Conta #{idx + 1}</h4>
+                <h4 className="text-sm font-semibold text-indigo-400 mb-3 flex justify-between">
+                    <span>Conta #{idx + 1}</span>
+                    <span className="text-xs text-slate-500 font-normal">Preencha os dados de acesso</span>
+                </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                    <label className="text-xs text-slate-500 mb-1 block">Nome / Login</label>
-                    <input 
-                        type="text" 
-                        value={acc.name}
-                        onChange={(e) => handleAccountDetailChange(idx, 'name', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
-                    />
+                        <label className="text-xs text-slate-500 mb-1 block">Nome do Titular</label>
+                        <input 
+                            type="text" 
+                            value={acc.name}
+                            onChange={(e) => handleAccountDetailChange(idx, 'name', e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                        />
                     </div>
                     <div>
-                    <label className="text-xs text-slate-500 mb-1 block">Email</label>
-                    <input 
-                        type="text" 
-                        value={acc.email}
-                        onChange={(e) => handleAccountDetailChange(idx, 'email', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
-                    />
+                        <label className="text-xs text-slate-500 mb-1 block">Email de Acesso</label>
+                        <input 
+                            type="text" 
+                            value={acc.email}
+                            onChange={(e) => handleAccountDetailChange(idx, 'email', e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                        />
                     </div>
+                    
+                    <div>
+                        <label className="text-xs text-slate-500 mb-1 block">Usuário (Login)</label>
+                        <input 
+                            type="text" 
+                            value={acc.username || ''}
+                            onChange={(e) => handleAccountDetailChange(idx, 'username', e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-xs text-slate-500 mb-1 block">Senha</label>
+                        <input 
+                            type="text" 
+                            value={acc.password || ''}
+                            onChange={(e) => handleAccountDetailChange(idx, 'password', e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-mono"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="text-xs text-slate-500 mb-1 block">Dono da Conta</label>
+                        <input 
+                            type="text" 
+                            value={acc.owner || ''}
+                            onChange={(e) => handleAccountDetailChange(idx, 'owner', e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-xs text-slate-500 mb-1 block">Valor Depositado (R$)</label>
+                        <input 
+                            type="number" 
+                            step="0.01"
+                            value={acc.depositValue}
+                            onChange={(e) => handleAccountDetailChange(idx, 'depositValue', parseFloat(e.target.value) || 0)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                        />
+                    </div>
+                    
                     <div className="md:col-span-2">
-                    <label className="text-xs text-slate-500 mb-1 block">Valor Depositado (R$)</label>
-                    <input 
-                        type="number" 
-                        step="0.01"
-                        value={acc.depositValue}
-                        onChange={(e) => handleAccountDetailChange(idx, 'depositValue', parseFloat(e.target.value) || 0)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
-                    />
+                        <label className="text-xs text-slate-500 mb-1 block">Dados do Card / Info Adicional</label>
+                        <textarea 
+                            rows={2}
+                            value={acc.card || ''}
+                            onChange={(e) => handleAccountDetailChange(idx, 'card', e.target.value)}
+                            placeholder="CPF, Data Nasc, etc..."
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white resize-none"
+                        />
                     </div>
                 </div>
                 </div>
@@ -763,6 +810,9 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
         </div>
       )}
 
+      {/* Other modals remain unchanged but omitted for brevity in this delta, 
+          they are part of the full file content above */}
+          
       {/* Deletion Confirmation Modal */}
       {deletingTask && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">

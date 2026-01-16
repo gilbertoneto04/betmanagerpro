@@ -63,7 +63,8 @@ const App: React.FC = () => {
                 name: firebaseUser.displayName || 'User', 
                 email: firebaseUser.email || '', 
                 username: firebaseUser.email?.split('@')[0] || 'user', 
-                role: 'AGENCIA' 
+                role: 'AGENCIA',
+                createdAt: new Date().toISOString()
               };
               setCurrentUser(u);
             }
@@ -74,7 +75,8 @@ const App: React.FC = () => {
                 name: firebaseUser.displayName || 'User', 
                 email: firebaseUser.email || '', 
                 username: firebaseUser.email?.split('@')[0] || 'user', 
-                role: 'AGENCIA' 
+                role: 'AGENCIA',
+                createdAt: new Date().toISOString()
               };
               setCurrentUser(u);
         }
@@ -217,6 +219,7 @@ const App: React.FC = () => {
     try {
         const newTask = {
           ...newTaskData,
+          createdBy: currentUser?.name || 'Desconhecido',
           orderIndex: Date.now(),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -331,6 +334,7 @@ const App: React.FC = () => {
         if (updates.pixKeyInfo && updates.pixKeyInfo !== task.pixKeyInfo) {
              addLog(taskId, `Edição - ${task.house}`, `Chave Pix atualizada.`);
         }
+        addLog(taskId, `Edição - ${task.house}`, `Pendência editada.`);
     } catch (e: any) {
         alert(`Erro ao editar tarefa: ${e.message}`);
     }
@@ -380,7 +384,7 @@ const App: React.FC = () => {
 
   const handleFinishNewAccountTask = async (
     taskId: string, 
-    accountsData: { name: string; email: string; depositValue: number }[],
+    accountsData: { name: string; email: string; depositValue: number, username?: string, password?: string, card?: string, owner?: string }[],
     packIdToDeduct?: string
   ) => {
     const task = tasks.find(t => t.id === taskId);
@@ -392,18 +396,20 @@ const App: React.FC = () => {
 
     try {
         const batchPromises = accountsData.map(data => {
-            return addDoc(collection(db, 'accounts'), sanitizePayload({
-                name: data.name,
-                email: data.email,
-                depositValue: data.depositValue,
+            const { card, ...otherData } = data;
+            // Structure object explicitly to ensure card is last in the definition (though JS objects key order is mostly creation order)
+            const accountPayload = {
+                ...otherData,
                 house: task.house,
                 status: 'ACTIVE',
                 tags: [],
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 taskIdSource: taskId,
-                packId: packIdToDeduct
-            }));
+                packId: packIdToDeduct,
+                card: card // Put card at the end
+            };
+            return addDoc(collection(db, 'accounts'), sanitizePayload(accountPayload));
         });
         await Promise.all(batchPromises);
 
@@ -477,7 +483,7 @@ const App: React.FC = () => {
                description: `Solicitação de saque manual (${context}).`,
                pixKeyInfo: pixInfo,
                status: TaskStatus.PENDENTE 
-          });
+              });
           // Update timestamp on account to reflect activity
           await updateDoc(doc(db, 'accounts', accountId), { updatedAt: new Date().toISOString() });
           
@@ -580,7 +586,7 @@ const App: React.FC = () => {
     try {
         if (accountData.id) {
           // Edit existing
-          const { id, ...data } = accountData;
+          const { id, card, ...data } = accountData;
           const accRef = doc(db, 'accounts', id);
           
           // 1. Fetch old data to check for changes
@@ -588,8 +594,14 @@ const App: React.FC = () => {
           if (accSnap.exists()) {
               const oldData = accSnap.data() as Account;
               
+              const updatePayload = {
+                  ...data,
+                  updatedAt: new Date().toISOString(),
+                  card: card // Ensure card is at end
+              };
+
               // 2. Update Account
-              await updateDoc(accRef, sanitizePayload({ ...data, updatedAt: new Date().toISOString() }));
+              await updateDoc(accRef, sanitizePayload(updatePayload));
               
               // 3. CHECK FOR SYNC NEEDS (Cascade Update)
               if (oldData.name !== data.name || oldData.house !== data.house) {
@@ -617,11 +629,13 @@ const App: React.FC = () => {
           addLog(id, `Conta ${accountData.name}`, 'Dados da conta atualizados manualmente');
         } else {
           // Create new manual
+          const { card, ...data } = accountData;
           const newAccount = {
-            ...accountData,
+            ...data,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-            packId: packIdToDeduct
+            packId: packIdToDeduct,
+            card: card // Ensure card is at end
           };
           delete (newAccount as any).id;
           
@@ -769,6 +783,8 @@ const App: React.FC = () => {
             onReorderTasks={handleReorderTasks}
             availableTypes={taskTypes}
             logs={logs} 
+            accounts={accounts} 
+            availableHouses={houses} 
           />
       )}
       {activeTab === 'NEW_REQUEST' && (
@@ -807,6 +823,8 @@ const App: React.FC = () => {
             onSave={handleSaveAccount} 
             availableHouses={houses}
             logs={logs}
+            tasks={tasks}
+            availableTypes={taskTypes}
           />
       )}
       {activeTab === 'ACCOUNTS_LIMITED' && (
@@ -823,6 +841,8 @@ const App: React.FC = () => {
             onDelete={handleDeleteAccount}
             availableHouses={houses}
             logs={logs}
+            tasks={tasks}
+            availableTypes={taskTypes}
           />
       )}
       {activeTab === 'ACCOUNTS_REPLACEMENT' && (
@@ -838,6 +858,8 @@ const App: React.FC = () => {
             onWithdraw={handleCreateWithdrawalForAccount}
             availableHouses={houses}
             logs={logs}
+            tasks={tasks}
+            availableTypes={taskTypes}
           />
       )}
       {activeTab === 'ACCOUNTS_DELETED' && (
@@ -851,6 +873,8 @@ const App: React.FC = () => {
             onDelete={handlePermanentDeleteAccount}
             availableHouses={houses}
             logs={logs}
+            tasks={tasks}
+            availableTypes={taskTypes}
           />
       )}
       {activeTab === 'SETTINGS' && currentUser?.role !== 'AGENCIA' && (

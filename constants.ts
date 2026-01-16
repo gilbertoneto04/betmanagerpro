@@ -18,6 +18,13 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   [TaskStatus.EXCLUIDA]: 'Excluída'
 };
 
+export const ACCOUNT_STATUS_LABELS: Record<string, string> = {
+  'ACTIVE': 'Ativa',
+  'LIMITED': 'Limitada',
+  'REPLACEMENT': 'Reposição',
+  'DELETED': 'Excluída'
+};
+
 export const STATUS_COLORS: Record<TaskStatus, string> = {
   [TaskStatus.PENDENTE]: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
   [TaskStatus.SOLICITADA]: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
