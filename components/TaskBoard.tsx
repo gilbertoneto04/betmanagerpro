@@ -19,6 +19,7 @@ interface TaskBoardProps {
   logs?: LogEntry[]; 
   accounts: Account[];
   availableHouses: string[];
+  onLogActivity?: (context: string, action: string) => void;
 }
 
 // Helper for House Colors
@@ -37,7 +38,7 @@ const getHouseStyles = (houseName: string) => {
     return 'bg-slate-800 text-slate-300 border-slate-700 shadow-slate-900/20';
 };
 
-export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, currentUser, users, onUpdateStatus, onEditTask, onFinishNewAccountTask, onDeleteTask, onReorderTasks, availableTypes, logs, accounts, availableHouses }) => {
+export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, currentUser, users, onUpdateStatus, onEditTask, onFinishNewAccountTask, onDeleteTask, onReorderTasks, availableTypes, logs, accounts, availableHouses, onLogActivity }) => {
   // Default filter is 'UNFINISHED' (Não Finalizadas)
   const [filter, setFilter] = React.useState<'ALL' | 'UNFINISHED' | TaskStatus>('UNFINISHED');
   
@@ -144,19 +145,10 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
     }
   }, [editingPixTask, currentUser]);
 
-  const filteredTasks = useMemo(() => {
+  // 1. First, apply Advanced Filters (Owner, House, Type) to get a base list.
+  // This list is used to calculate counts for the buttons.
+  const baseFilteredTasks = useMemo(() => {
     let list = [...tasks];
-    
-    // Status Filter
-    if (filter === 'ALL') {
-        list = list.filter(t => t.status !== TaskStatus.EXCLUIDA);
-    } else if (filter === 'UNFINISHED') {
-        list = list.filter(t => t.status !== TaskStatus.FINALIZADA && t.status !== TaskStatus.EXCLUIDA);
-    } else {
-        list = list.filter(t => t.status === filter);
-    }
-
-    // Advanced Filters
     if (filterOwner !== 'ALL') {
         list = list.filter(t => t.createdBy === filterOwner);
     }
@@ -166,9 +158,28 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
     if (filterType !== 'ALL') {
         list = list.filter(t => t.type === filterType);
     }
-    
     return list;
-  }, [tasks, filter, filterOwner, filterHouse, filterType]);
+  }, [tasks, filterOwner, filterHouse, filterType]);
+
+  // 2. Then apply the Status Filter (Active Tab) to get the final list to render
+  const finalRenderTasks = useMemo(() => {
+    let list = [...baseFilteredTasks];
+    if (filter === 'ALL') {
+        list = list.filter(t => t.status !== TaskStatus.EXCLUIDA);
+    } else if (filter === 'UNFINISHED') {
+        list = list.filter(t => t.status !== TaskStatus.FINALIZADA && t.status !== TaskStatus.EXCLUIDA);
+    } else {
+        list = list.filter(t => t.status === filter);
+    }
+    return list;
+  }, [baseFilteredTasks, filter]);
+
+  // Activity Logging Logic for Filter Changes
+  const handleFilterChange = (type: string, value: string) => {
+      if (onLogActivity) {
+          onLogActivity('Filtro Pendências', `Alterou filtro ${type} para: ${value}`);
+      }
+  };
 
   // DnD Handlers
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
@@ -196,8 +207,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
           const acc = accounts.find(a => a.name === task.accountName && a.house === task.house);
           if (acc) {
               setViewingAccount(acc);
-          } else {
-              // Try finding by ID if accountName fails (optional backup logic, not strictly required if name is key)
+              if (onLogActivity) onLogActivity('Interação', `Visualizou detalhes da conta: ${acc.name}`);
           }
       }
   };
@@ -349,7 +359,10 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
   
   const FilterButton = ({ label, value, count }: { label: string, value: 'ALL' | 'UNFINISHED' | TaskStatus, count: number }) => (
     <button
-      onClick={() => setFilter(value)}
+      onClick={() => {
+          setFilter(value);
+          handleFilterChange('Status', value);
+      }}
       className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
         filter === value
           ? 'bg-slate-800 text-white border border-slate-700 shadow-sm'
@@ -490,13 +503,13 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                 <FilterButton 
                     label="Não Finalizadas" 
                     value="UNFINISHED" 
-                    count={tasks.filter(t => t.status !== TaskStatus.FINALIZADA && t.status !== TaskStatus.EXCLUIDA).length} 
+                    count={baseFilteredTasks.filter(t => t.status !== TaskStatus.FINALIZADA && t.status !== TaskStatus.EXCLUIDA).length} 
                 />
-                <FilterButton label="Todas" value="ALL" count={tasks.filter(t => t.status !== TaskStatus.EXCLUIDA).length} />
-                <FilterButton label="Pendentes" value={TaskStatus.PENDENTE} count={tasks.filter(t => t.status === TaskStatus.PENDENTE).length} />
-                <FilterButton label="Solicitadas" value={TaskStatus.SOLICITADA} count={tasks.filter(t => t.status === TaskStatus.SOLICITADA).length} />
-                <FilterButton label="Finalizadas" value={TaskStatus.FINALIZADA} count={tasks.filter(t => t.status === TaskStatus.FINALIZADA).length} />
-                <FilterButton label="Excluídas" value={TaskStatus.EXCLUIDA} count={tasks.filter(t => t.status === TaskStatus.EXCLUIDA).length} />
+                <FilterButton label="Todas" value="ALL" count={baseFilteredTasks.filter(t => t.status !== TaskStatus.EXCLUIDA).length} />
+                <FilterButton label="Pendentes" value={TaskStatus.PENDENTE} count={baseFilteredTasks.filter(t => t.status === TaskStatus.PENDENTE).length} />
+                <FilterButton label="Solicitadas" value={TaskStatus.SOLICITADA} count={baseFilteredTasks.filter(t => t.status === TaskStatus.SOLICITADA).length} />
+                <FilterButton label="Finalizadas" value={TaskStatus.FINALIZADA} count={baseFilteredTasks.filter(t => t.status === TaskStatus.FINALIZADA).length} />
+                <FilterButton label="Excluídas" value={TaskStatus.EXCLUIDA} count={baseFilteredTasks.filter(t => t.status === TaskStatus.EXCLUIDA).length} />
             </div>
         </div>
       </div>
@@ -511,7 +524,10 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full md:w-auto flex-1">
               <select 
                   value={filterOwner}
-                  onChange={(e) => setFilterOwner(e.target.value)}
+                  onChange={(e) => {
+                      setFilterOwner(e.target.value);
+                      handleFilterChange('Dono', e.target.value);
+                  }}
                   className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-indigo-500"
               >
                   <option value="ALL">Todos os Donos</option>
@@ -522,7 +538,10 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
 
               <select 
                   value={filterHouse}
-                  onChange={(e) => setFilterHouse(e.target.value)}
+                  onChange={(e) => {
+                      setFilterHouse(e.target.value);
+                      handleFilterChange('Casa', e.target.value);
+                  }}
                   className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-indigo-500"
               >
                   <option value="ALL">Todas as Casas</option>
@@ -533,7 +552,10 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
 
               <select 
                   value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
+                  onChange={(e) => {
+                      setFilterType(e.target.value);
+                      handleFilterChange('Tipo', e.target.value);
+                  }}
                   className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-indigo-500"
               >
                   <option value="ALL">Todos os Tipos</option>
@@ -545,7 +567,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filteredTasks.length === 0 ? (
+        {finalRenderTasks.length === 0 ? (
            <div className="col-span-full py-20 text-center border border-dashed border-slate-800 rounded-2xl bg-slate-900/50">
              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-800 mb-4 text-slate-500">
                {filter === TaskStatus.EXCLUIDA ? <Trash2 size={32} /> : <CheckCircle2 size={32} />}
@@ -556,7 +578,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
              <p className="text-slate-500 text-sm">Nesta seção não há itens para exibir.</p>
            </div>
         ) : (
-          filteredTasks.map((task) => (
+          finalRenderTasks.map((task) => (
             <div 
               key={task.id}
               draggable
@@ -573,7 +595,11 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ tasks, packs, pixKeys, cur
                   {/* History Button */}
                   {logs && (
                     <button
-                        onClick={(e) => { e.stopPropagation(); setHistoryTask(task); }}
+                        onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setHistoryTask(task);
+                            if (onLogActivity) onLogActivity('Interação', `Visualizou histórico da pendência: ${task.type} - ${task.house}`);
+                        }}
                         className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
                         title="Ver Histórico"
                     >

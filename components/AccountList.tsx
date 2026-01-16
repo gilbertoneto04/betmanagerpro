@@ -19,6 +19,7 @@ interface AccountListProps {
   logs?: LogEntry[]; // Passed for history Modal
   tasks?: Task[]; // Passed to check for pending tasks
   availableTypes?: { label: string, value: string }[];
+  onLogActivity?: (context: string, action: string) => void;
 }
 
 // Extracted Component to prevent re-render focus loss
@@ -76,7 +77,7 @@ const PixSelectionSection: React.FC<{
 );
 
 
-export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs, pixKeys, currentUser, onLimit, onReplacement, onWithdraw, onReactivate, onDelete, onSave, availableHouses, logs, tasks, availableTypes }) => {
+export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs, pixKeys, currentUser, onLimit, onReplacement, onWithdraw, onReactivate, onDelete, onSave, availableHouses, logs, tasks, availableTypes, onLogActivity }) => {
   const [selectedAccountForLimit, setSelectedAccountForLimit] = useState<Account | null>(null);
   const [selectedAccountForReplacement, setSelectedAccountForReplacement] = useState<Account | null>(null);
   const [selectedAccountForWithdrawal, setSelectedAccountForWithdrawal] = useState<Account | null>(null);
@@ -239,7 +240,13 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
   const handleWithdrawalClick = (e: React.MouseEvent, account: Account) => { e.stopPropagation(); setSelectedAccountForWithdrawal(account); };
   const handleDeleteClick = (e: React.MouseEvent, account: Account) => { e.stopPropagation(); setSelectedAccountForDeletion(account); setDeletionReason(''); };
   const handleEditClick = (e: React.MouseEvent, account: Account) => { e.stopPropagation(); setEditingAccount({ ...account, tags: account.tags || [] }); };
-  const handleHistoryClick = (e: React.MouseEvent, account: Account) => { e.stopPropagation(); setHistoryAccount(account); };
+  
+  const handleHistoryClick = (e: React.MouseEvent, account: Account) => { 
+      e.stopPropagation(); 
+      setHistoryAccount(account); 
+      if (onLogActivity) onLogActivity('Interação', `Visualizou histórico da conta: ${account.name}`);
+  };
+  
   const handleReactivateClick = (e: React.MouseEvent, account: Account) => {
       e.stopPropagation();
       const msg = type === 'DELETED' 
@@ -353,12 +360,38 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
       return `Registro: ${new Date(acc.createdAt).toLocaleDateString()}`;
   };
 
-  const getFilteredLogs = (accId: string, accName: string) => {
+  const getFilteredLogs = (account: Account) => {
       if (!logs) return [];
-      return logs.filter(l => 
-          (l.taskDescription && l.taskDescription.includes(accName)) || 
-          (l.taskId === accId) 
-      ).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      
+      // 1. Direct Account Logs (by ID or exact name match in description)
+      const directLogs = logs.filter(l => 
+          l.taskId === account.id || 
+          (l.taskDescription && l.taskDescription.includes(account.name))
+      );
+
+      // 2. Logs from linked Tasks
+      // Find tasks that belong to this account
+      let taskLogs: LogEntry[] = [];
+      if (tasks && tasks.length > 0) {
+          const linkedTaskIds = tasks
+              .filter(t => t.accountName === account.name && t.house === account.house)
+              .map(t => t.id);
+          
+          if (linkedTaskIds.length > 0) {
+              taskLogs = logs.filter(l => l.taskId && linkedTaskIds.includes(l.taskId));
+          }
+      }
+
+      // Combine and Remove Duplicates
+      const combined = [...directLogs, ...taskLogs];
+      const uniqueMap = new Map();
+      combined.forEach(item => {
+          if(!uniqueMap.has(item.id)){
+              uniqueMap.set(item.id, item);
+          }
+      });
+      
+      return Array.from(uniqueMap.values()).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   };
 
   // Get specific pending task name
@@ -611,7 +644,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                     <div className="flex items-center gap-2 overflow-hidden">
                         <UserIcon size={14} className="text-blue-400 shrink-0" />
                         <span className="truncate text-slate-300">{account.username}</span>
-                    </div>
+                     </div>
                     <button onClick={(e) => handleCopy(e, account.username!)} className="opacity-0 group-hover/field:opacity-100 text-slate-500 hover:text-white p-1"><Copy size={12} /></button>
                  </div>
               )}
@@ -693,7 +726,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
 
       {/* Account Details Modal */}
       {viewingAccount && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn" onClick={(e) => e.stopPropagation()}>
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl relative flex flex-col max-h-[90vh]">
              {/* Fixed Header */}
              <div className="p-6 pb-2 shrink-0 border-b border-slate-800/50">
@@ -779,8 +812,8 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
                 </h3>
                 
                 <div className="overflow-y-auto pr-2 flex-1 space-y-3">
-                    {getFilteredLogs(historyAccount.id, historyAccount.name).length > 0 ? (
-                        getFilteredLogs(historyAccount.id, historyAccount.name).map(log => (
+                    {getFilteredLogs(historyAccount).length > 0 ? (
+                        getFilteredLogs(historyAccount).map(log => (
                             <div key={log.id} className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg text-sm">
                                 <div className="flex justify-between items-start mb-1">
                                     <span className="font-semibold text-slate-200">{log.action}</span>
@@ -1027,177 +1060,6 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts, type, packs,
              </div>
           </div>
         </div>
-      )}
-
-      {/* Limit Confirmation Modal */}
-      {selectedAccountForLimit && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex items-center gap-3 text-amber-500 mb-4">
-              <AlertTriangle size={24} />
-              <h3 className="text-xl font-bold text-white">Limitar Conta</h3>
-            </div>
-            
-            <p className="text-slate-300 mb-4">
-              Você está marcando a conta <strong>{selectedAccountForLimit.name}</strong> como limitada. 
-              Deseja registrar automaticamente uma pendência de saque?
-            </p>
-            
-            <PixSelectionSection 
-                mode={pixSelectionMode} setMode={setPixSelectionMode}
-                selectedId={selectedPixId} setSelectedId={setSelectedPixId}
-                newString={newPixString} setNewString={setNewPixString}
-                pixKeys={pixKeys}
-            />
-
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => confirmLimit(true)}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-colors"
-              >
-                Sim, registrar saque e limitar (Enter)
-              </button>
-              <button
-                onClick={() => confirmLimit(false)}
-                className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-medium transition-colors"
-              >
-                Não, apenas limitar
-              </button>
-              <button
-                onClick={resetModals}
-                className="w-full py-2 text-slate-500 hover:text-slate-400 text-sm"
-              >
-                Cancelar (Esc)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Replacement Confirmation Modal */}
-      {selectedAccountForReplacement && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex items-center gap-3 text-rose-500 mb-4">
-              <RefreshCw size={24} />
-              <h3 className="text-xl font-bold text-white">Conta em Reposição</h3>
-            </div>
-            
-            <p className="text-slate-300 mb-4">
-              Você está marcando a conta <strong>{selectedAccountForReplacement.name}</strong> como defeituosa/reposição. 
-              Deseja registrar automaticamente uma pendência de saque?
-            </p>
-
-            <PixSelectionSection 
-                mode={pixSelectionMode} setMode={setPixSelectionMode}
-                selectedId={selectedPixId} setSelectedId={setSelectedPixId}
-                newString={newPixString} setNewString={setNewPixString}
-                pixKeys={pixKeys}
-            />
-
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => confirmReplacement(true)}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-colors"
-              >
-                Sim, registrar saque e marcar (Enter)
-              </button>
-              <button
-                onClick={() => confirmReplacement(false)}
-                className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-medium transition-colors"
-              >
-                Não, apenas marcar
-              </button>
-              <button
-                onClick={resetModals}
-                className="w-full py-2 text-slate-500 hover:text-slate-400 text-sm"
-              >
-                Cancelar (Esc)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Withdrawal Confirmation Modal (From Limited Tab) */}
-      {selectedAccountForWithdrawal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex items-center gap-3 text-emerald-500 mb-4">
-              <DollarSign size={24} />
-              <h3 className="text-xl font-bold text-white">Solicitar Saque</h3>
-            </div>
-            
-            <p className="text-slate-300 mb-4">
-              Registrar pendência de saque para a conta <strong>{selectedAccountForWithdrawal.name}</strong>?
-            </p>
-
-            <PixSelectionSection 
-                mode={pixSelectionMode} setMode={setPixSelectionMode}
-                selectedId={selectedPixId} setSelectedId={setSelectedPixId}
-                newString={newPixString} setNewString={setNewPixString}
-                pixKeys={pixKeys}
-            />
-
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={confirmWithdrawal}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition-colors"
-              >
-                Confirmar Solicitação (Enter)
-              </button>
-              <button
-                onClick={resetModals}
-                className="w-full py-2 text-slate-500 hover:text-slate-400 text-sm"
-              >
-                Cancelar (Esc)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Deletion Modal */}
-      {selectedAccountForDeletion && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-                <div className="flex items-center gap-3 text-red-500 mb-4">
-                    <Trash2 size={24} />
-                    <h3 className="text-xl font-bold text-white">Excluir Conta</h3>
-                </div>
-                
-                <p className="text-slate-300 mb-4">
-                    Tem certeza que deseja excluir a conta <strong>{selectedAccountForDeletion.name}</strong>? 
-                    Ela será movida para a aba de "Contas Excluídas".
-                </p>
-
-                <div className="mb-6">
-                    <label className="text-xs font-medium text-slate-400 mb-2 block">Justificativa (Opcional)</label>
-                    <textarea
-                        rows={3}
-                        value={deletionReason}
-                        onChange={(e) => setDeletionReason(e.target.value)}
-                        placeholder="Ex: Conta banida, duplicada..."
-                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:ring-2 focus:ring-red-500/50 outline-none resize-none"
-                    />
-                </div>
-
-                <div className="flex flex-col gap-3">
-                    <button
-                        onClick={confirmDeletion}
-                        className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors"
-                    >
-                        Confirmar Exclusão (Enter)
-                    </button>
-                    <button
-                        onClick={resetModals}
-                        className="w-full py-2 text-slate-500 hover:text-slate-400 text-sm"
-                    >
-                        Cancelar (Esc)
-                    </button>
-                </div>
-            </div>
-          </div>
       )}
     </div>
   );
