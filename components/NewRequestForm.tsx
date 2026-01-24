@@ -36,16 +36,21 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
       const newVal = !filterActiveOnly;
       setFilterActiveOnly(newVal);
       localStorage.setItem('newRequest_filterActiveOnly', JSON.stringify(newVal));
-      // Reset selection if the currently selected account becomes hidden
       setSelectedAccountId('');
   };
 
-  // Sort accounts: Active -> Limited -> Replacement -> Deleted
+  // Sort accounts & Filter by House + Status
   const sortedAccounts = useMemo(() => {
     let filtered = accounts;
     
+    // 1. Filter by House (If a house is selected)
+    if (house) {
+        filtered = filtered.filter(a => a.house === house);
+    }
+
+    // 2. Filter by Status (If checkbox is checked)
     if (filterActiveOnly) {
-        filtered = accounts.filter(a => a.status === 'ACTIVE');
+        filtered = filtered.filter(a => a.status === 'ACTIVE');
     }
 
     return [...filtered].sort((a, b) => {
@@ -56,7 +61,14 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
         if (orderA !== orderB) return orderA - orderB;
         return a.name.localeCompare(b.name);
     });
-  }, [accounts, filterActiveOnly]);
+  }, [accounts, filterActiveOnly, house]);
+
+  // Reset selected account if it disappears from the filtered list (e.g. house changed)
+  useEffect(() => {
+      if (selectedAccountId && !sortedAccounts.find(a => a.id === selectedAccountId)) {
+          setSelectedAccountId('');
+      }
+  }, [house, sortedAccounts, selectedAccountId]);
 
   // Set defaults when lists load
   useEffect(() => {
@@ -70,16 +82,6 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
       return () => clearTimeout(timer);
     }
   }, [success]);
-
-  // Auto-set house when account is selected, but allow change
-  useEffect(() => {
-    if (selectedAccountId) {
-        const acc = accounts.find(a => a.id === selectedAccountId);
-        if (acc) {
-            setHouse(acc.house);
-        }
-    }
-  }, [selectedAccountId, accounts]);
 
   // Check if type requires Pix
   const needsPix = type === 'SAQUE' || type === 'ENVIO_SALDO';
@@ -106,14 +108,14 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
   };
 
   const getAccountLabel = (acc: Account) => {
-      // Format: Casa - Dono - Titular
-      let label = `${acc.house}`;
+      // Format: Dono - Titular
+      let label = ``;
       
       if (acc.owner) {
-          label += ` - ${acc.owner}`;
+          label += `${acc.owner} - `;
       }
       
-      label += ` - ${acc.name}`;
+      label += `${acc.name}`;
       
       if (acc.status === 'LIMITED') label = `[LIMITADA] ${label}`;
       else if (acc.status === 'REPLACEMENT') label = `[REPOSIÇÃO] ${label}`;
@@ -138,7 +140,6 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
       return;
     }
     
-    // For Conta Nova, house is mandatory (from dropdown). For others, house is auto-set but check anyway.
     if (!house) {
         setError('A casa de aposta é obrigatória.');
         return;
@@ -174,7 +175,6 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
     setSelectedAccountId('');
     setQuantity(1);
     setDescription('');
-    // Reset pix to default
     if (needsPix && currentUser?.defaultPixKeyId) {
         setPixSelectionMode('SAVED');
         setSelectedPixId(currentUser.defaultPixKeyId);
@@ -226,7 +226,7 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
               </select>
             </div>
 
-            {/* House Selection - Always enabled now */}
+            {/* House Selection - Acts as filter for Accounts now */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-400">Casa de Aposta</label>
               <select
@@ -258,7 +258,9 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
           ) : (
             <div className="space-y-2 animate-fadeIn">
               <div className="flex justify-between items-center">
-                  <label className="text-sm font-medium text-slate-400">Selecione a Conta</label>
+                  <label className="text-sm font-medium text-slate-400">
+                      Selecione a Conta <span className="text-slate-500 font-normal">({house})</span>
+                  </label>
                   <label className="flex items-center gap-2 text-xs text-indigo-400 cursor-pointer hover:text-indigo-300 transition-colors bg-indigo-500/10 px-2 py-1 rounded-lg border border-indigo-500/20">
                       <input 
                         type="checkbox" 
@@ -272,17 +274,18 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSave, availabl
               <select
                 value={selectedAccountId}
                 onChange={(e) => setSelectedAccountId(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none"
+                disabled={!house}
+                className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                 <option value="">Selecione...</option>
+                 <option value="">{house ? 'Selecione...' : 'Selecione uma casa primeiro'}</option>
                  {sortedAccounts.map(acc => (
                      <option key={acc.id} value={acc.id} className={acc.status !== 'ACTIVE' ? 'text-amber-300' : ''}>
                          {getAccountLabel(acc)}
                      </option>
                  ))}
               </select>
-              {sortedAccounts.length === 0 && (
-                  <p className="text-xs text-slate-500 mt-1">Nenhuma conta encontrada com o filtro atual.</p>
+              {house && sortedAccounts.length === 0 && (
+                  <p className="text-xs text-slate-500 mt-1">Nenhuma conta encontrada em {house} com os filtros atuais.</p>
               )}
             </div>
           )}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Pack, Account, User, LogEntry } from '../types';
 import { Package, Plus, ChevronDown, ChevronUp, CheckCircle2, DollarSign, RefreshCw, Pencil, X, Tag, CreditCard, Ban, Trash2, User as UserIcon } from 'lucide-react';
 import { ACCOUNT_STATUS_LABELS } from '../constants';
@@ -19,6 +19,9 @@ export const PackList: React.FC<PackListProps> = ({ packs, accounts, availableHo
   const [isCreating, setIsCreating] = useState(false);
   const [expandedPack, setExpandedPack] = useState<string | null>(null);
   const [viewingAccount, setViewingAccount] = useState<Account | null>(null);
+  
+  // Sorting State
+  const [sortBy, setSortBy] = useState<'DATE' | 'QUANTITY' | 'HOUSE'>('DATE');
   
   // Edit State
   const [editingPack, setEditingPack] = useState<Pack | null>(null);
@@ -80,7 +83,21 @@ export const PackList: React.FC<PackListProps> = ({ packs, accounts, availableHo
       setPrice(0);
   };
 
-  const filteredPacks = packs.filter(p => p.status === activeTab).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const filteredPacks = useMemo(() => {
+      let list = packs.filter(p => p.status === activeTab);
+      
+      // Sorting Logic
+      return list.sort((a, b) => {
+          if (sortBy === 'QUANTITY') {
+              return b.quantity - a.quantity;
+          }
+          if (sortBy === 'HOUSE') {
+              return a.house.localeCompare(b.house);
+          }
+          // Default DATE
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+  }, [packs, activeTab, sortBy]);
 
   const getPackAccounts = (packId: string) => {
     return accounts.filter(a => a.packId === packId);
@@ -102,18 +119,29 @@ export const PackList: React.FC<PackListProps> = ({ packs, accounts, availableHo
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-white">Gestão de Packs</h2>
           <p className="text-slate-400 text-sm mt-1">Gerencie a compra e entrega de lotes de contas</p>
         </div>
-        <button 
-          onClick={() => { setIsCreating(true); resetForm(); }}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-500/20 transition-all"
-        >
-          <Plus size={18} />
-          Novo Pack
-        </button>
+        <div className="flex gap-2">
+            <select 
+                value={sortBy} 
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-300 focus:ring-2 focus:ring-indigo-500"
+            >
+                <option value="DATE">Recentes</option>
+                <option value="HOUSE">Casa (A-Z)</option>
+                <option value="QUANTITY">Quantidade</option>
+            </select>
+            <button 
+            onClick={() => { setIsCreating(true); resetForm(); }}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-500/20 transition-all"
+            >
+            <Plus size={18} />
+            Novo Pack
+            </button>
+        </div>
       </div>
 
       {/* Tabs */}
